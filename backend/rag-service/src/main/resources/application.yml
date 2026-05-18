@@ -45,4 +45,5 @@ rag:
     embedding-model: bge-m3
     embedding-dimension: 1024
     chat-model: deepseek-chat
-
+  storage:
+    upload-dir: ${RAG_UPLOAD_DIR:uploads/documents}

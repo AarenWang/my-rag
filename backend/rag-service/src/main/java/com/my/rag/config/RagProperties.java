@@ -8,6 +8,7 @@ public class RagProperties {
     private final Chunk chunk = new Chunk();
     private final Retrieval retrieval = new Retrieval();
     private final Model model = new Model();
+    private final Storage storage = new Storage();
 
     public Chunk getChunk() {
         return chunk;
@@ -19,6 +20,10 @@ public class RagProperties {
 
     public Model getModel() {
         return model;
+    }
+
+    public Storage getStorage() {
+        return storage;
     }
 
     public static class Chunk {
@@ -110,5 +115,16 @@ public class RagProperties {
             this.chatModel = chatModel;
         }
     }
-}
 
+    public static class Storage {
+        private String uploadDir = "uploads/documents";
+
+        public String getUploadDir() {
+            return uploadDir;
+        }
+
+        public void setUploadDir(String uploadDir) {
+            this.uploadDir = uploadDir;
+        }
+    }
+}

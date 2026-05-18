@@ -25,7 +25,7 @@ $env:RAG_DATASOURCE_PASSWORD='<password>'
 也可以创建本地私密配置文件：
 
 ```text
-backend/rag-service/src/main/resources/application-local-secret.yml
+backend/rag-service/application-local-secret.yml
 ```
 
 该文件已被 `.gitignore` 排除，不要提交数据库密码。
@@ -35,7 +35,7 @@ backend/rag-service/src/main/resources/application-local-secret.yml
 ```powershell
 cd backend
 mvn -pl rag-service -am package -DskipTests
-java -jar rag-service/target/rag-service-0.0.1-SNAPSHOT.jar --spring.profiles.active=local-secret
+java -jar rag-service/target/rag-service-0.0.1-SNAPSHOT.jar --spring.config.additional-location=file:rag-service/application-local-secret.yml
 ```
 
 健康检查：
@@ -59,4 +59,3 @@ cd frontend
 pnpm install
 pnpm dev:web
 ```
-
