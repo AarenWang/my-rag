@@ -62,8 +62,9 @@ public class ChatService {
 
         RagChatLog chatLog = new RagChatLog();
         chatLog.setQuestion(request.question());
+        chatLogMapper.insert(chatLog);
+        Long chatLogId = chatLog.getId();
         
-        Long chatLogId = null;
         try {
             int retrievalTopK = resolveTopK(request.topK());
             double scoreThreshold = resolveScoreThreshold(request.scoreThreshold());
@@ -82,7 +83,7 @@ public class ChatService {
                 chatLog.setRetrievedChunkIds("");
                 chatLog.setTopK(resolveTopK(request.topK()));
                 chatLog.setLatencyMs(elapsedMillis(startedAt));
-                chatLogMapper.insert(chatLog);
+                chatLogMapper.updateById(chatLog);
                 return response;
             }
 
@@ -128,14 +129,12 @@ public class ChatService {
                     .min(Double::compareTo)
                     .orElse(null));
             chatLog.setLatencyMs(elapsedMillis(startedAt));
-            chatLogMapper.insert(chatLog);
-            chatLogId = chatLog.getId();
+            chatLogMapper.updateById(chatLog);
             
             return response;
-        } finally {
-            if (chatLogId == null && chatLog.getAnswer() != null) {
-                chatLogMapper.insert(chatLog);
-            }
+        } catch (Exception e) {
+            log.error("Chat failed, chatLogId: {}", chatLogId, e);
+            throw e;
         }
     }
 
