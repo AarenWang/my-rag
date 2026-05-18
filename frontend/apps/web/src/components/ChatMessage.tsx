@@ -1,9 +1,9 @@
 import type { ChatResponse } from "@my-rag/types";
-import { Alert, Card, Typography, Spin } from "antd";
-import { CheckCircle, AlertCircle, Bot, User, Loader2 } from "lucide-react";
-import SourceList from "./SourceList";
+import { Alert, Card, Spin, Typography } from "antd";
+import { AlertCircle, Bot, Loader2, User } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import SourceList from "./SourceList";
 
 interface ChatMessageProps {
   role: "user" | "assistant";
@@ -12,12 +12,7 @@ interface ChatMessageProps {
   isLoading?: boolean;
 }
 
-export default function ChatMessage({
-  role,
-  content,
-  response,
-  isLoading = false,
-}: ChatMessageProps) {
+export default function ChatMessage({ role, content, response, isLoading = false }: ChatMessageProps) {
   const isUser = role === "user";
 
   return (
@@ -35,30 +30,24 @@ export default function ChatMessage({
           flexShrink: 0,
         }}
       >
-        {isLoading ? (
-          <Loader2 size={20} className="animate-spin" />
-        ) : isUser ? (
-          <User size={20} />
-        ) : (
-          <Bot size={20} />
-        )}
+        {isLoading ? <Loader2 size={20} /> : isUser ? <User size={20} /> : <Bot size={20} />}
       </div>
       <div style={{ flex: 1 }}>
         <Typography.Text strong style={{ display: "block", marginBottom: 8 }}>
-          {isUser ? "用户" : "AI 助手"}
+          {isUser ? "You" : "Assistant"}
         </Typography.Text>
 
         {isLoading ? (
           <Card size="small">
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <Spin indicator={<Loader2 size={20} className="animate-spin" />} />
-              <Typography.Text>正在思考中...</Typography.Text>
+              <Spin indicator={<Loader2 size={20} />} />
+              <Typography.Text>Thinking...</Typography.Text>
             </div>
           </Card>
         ) : !isUser && response?.noAnswer ? (
           <Alert
-            message="当前资料中没有找到明确依据"
-            description="请尝试换一种问法，或检查文档是否已成功索引。"
+            message="No reliable answer found"
+            description="Try rephrasing the question, selecting different documents, or checking that embedding has completed."
             type="warning"
             icon={<AlertCircle />}
             showIcon
@@ -77,9 +66,7 @@ export default function ChatMessage({
           </Card>
         )}
 
-        {!isUser && !isLoading && response && !response.noAnswer && (
-          <SourceList sources={response.sources} />
-        )}
+        {!isUser && !isLoading && response && !response.noAnswer ? <SourceList sources={response.sources} /> : null}
       </div>
     </div>
   );
