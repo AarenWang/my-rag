@@ -20,3 +20,22 @@ export interface ChatResponse {
   sources: ChatSource[];
 }
 
+export interface ChatLogSummary {
+  id: number;
+  question: string;
+  answerPreview: string;
+  createdAt: string;
+}
+
+export interface ChatLogDetail {
+  id: number;
+  question: string;
+  answer: string;
+  documentIds: string;
+  retrievedChunkIds: string[];
+  topK: number | null;
+  minScore: number | null;
+  latencyMs: number | null;
+  createdAt: string;
+}
+
