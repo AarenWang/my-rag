@@ -1,16 +1,21 @@
 package com.my.rag.document.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.my.rag.api.document.dto.DocumentEmbeddingEstimateResponse;
 import com.my.rag.api.document.dto.DocumentIndexProgressResponse;
 import com.my.rag.api.document.dto.DocumentIndexResponse;
 import com.my.rag.api.document.dto.DocumentStatusResponse;
 import com.my.rag.api.document.dto.DocumentSummaryResponse;
 import com.my.rag.api.document.dto.DocumentUploadResponse;
+import com.my.rag.chunk.entity.RagDocumentChunk;
+import com.my.rag.chunk.repository.RagDocumentChunkMapper;
 import com.my.rag.config.RagProperties;
 import com.my.rag.document.entity.RagDocument;
 import com.my.rag.document.enums.DocumentStatus;
 import com.my.rag.document.repository.RagDocumentMapper;
 import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
@@ -31,18 +36,22 @@ import org.springframework.http.HttpStatus;
 public class DocumentService {
 
     private static final Logger log = LoggerFactory.getLogger(DocumentService.class);
+    private static final BigDecimal ONE_THOUSAND = new BigDecimal("1000");
 
     private static final Set<String> SUPPORTED_FILE_TYPES = Set.of("txt", "md", "markdown", "epub");
 
     private final RagDocumentMapper documentMapper;
+    private final RagDocumentChunkMapper chunkMapper;
     private final RagProperties ragProperties;
     private final DocumentIndexTaskService indexTaskService;
 
     public DocumentService(
             RagDocumentMapper documentMapper,
+            RagDocumentChunkMapper chunkMapper,
             RagProperties ragProperties,
             DocumentIndexTaskService indexTaskService) {
         this.documentMapper = documentMapper;
+        this.chunkMapper = chunkMapper;
         this.ragProperties = ragProperties;
         this.indexTaskService = indexTaskService;
     }
@@ -121,7 +130,38 @@ public class DocumentService {
 
     public DocumentIndexResponse indexDocument(Long documentId) {
         log.info("Received index request, documentId: {}", documentId);
-        return indexTaskService.submit(documentId);
+        return indexTaskService.submitIndex(documentId);
+    }
+
+    public DocumentIndexResponse embedDocument(Long documentId) {
+        log.info("Received embedding request, documentId: {}", documentId);
+        return indexTaskService.submitEmbedding(documentId);
+    }
+
+    public DocumentEmbeddingEstimateResponse getEmbeddingEstimate(Long documentId) {
+        RagDocument document = documentMapper.selectById(documentId);
+        if (document == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Document not found: " + documentId);
+        }
+
+        int chunkCount = countChunks(documentId);
+        long estimatedTokens = sumEstimatedTokens(documentId);
+        BigDecimal pricePer1kTokens = ragProperties.getModel().getEmbeddingPricePer1kTokens();
+        if (pricePer1kTokens == null) {
+            pricePer1kTokens = BigDecimal.ZERO;
+        }
+        BigDecimal estimatedCostCny = BigDecimal.valueOf(estimatedTokens)
+                .multiply(pricePer1kTokens)
+                .divide(ONE_THOUSAND, 8, RoundingMode.HALF_UP);
+
+        return new DocumentEmbeddingEstimateResponse(
+                documentId,
+                chunkCount,
+                estimatedTokens,
+                pricePer1kTokens,
+                estimatedCostCny,
+                ragProperties.getModel().getEmbeddingModel(),
+                ragProperties.getModel().getEmbeddingDimension());
     }
 
     public DocumentIndexProgressResponse getIndexProgress(Long documentId) {
@@ -140,6 +180,17 @@ public class DocumentService {
     private RagDocument findByFileHash(String fileHash) {
         return documentMapper.selectOne(
                 new LambdaQueryWrapper<RagDocument>().eq(RagDocument::getFileHash, fileHash).last("LIMIT 1"));
+    }
+
+    private int countChunks(Long documentId) {
+        Long count = chunkMapper.selectCount(
+                new LambdaQueryWrapper<RagDocumentChunk>().eq(RagDocumentChunk::getDocumentId, documentId));
+        return count == null ? 0 : Math.toIntExact(count);
+    }
+
+    private long sumEstimatedTokens(Long documentId) {
+        Long tokenCount = chunkMapper.sumTokenCountByDocumentId(documentId);
+        return tokenCount == null ? 0L : tokenCount;
     }
 
     private DocumentUploadResponse toUploadResponse(RagDocument document, boolean duplicate) {

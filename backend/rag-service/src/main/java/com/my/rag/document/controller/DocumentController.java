@@ -1,5 +1,6 @@
 package com.my.rag.document.controller;
 
+import com.my.rag.api.document.dto.DocumentEmbeddingEstimateResponse;
 import com.my.rag.api.document.dto.DocumentIndexProgressResponse;
 import com.my.rag.api.document.dto.DocumentIndexResponse;
 import com.my.rag.api.document.dto.DocumentStatusResponse;
@@ -52,6 +53,18 @@ public class DocumentController {
     public ApiResponse<DocumentIndexResponse> indexDocument(@PathVariable Long id) {
         log.info("API request: POST /api/rag/documents/{}/index", id);
         return ApiResponse.success(documentService.indexDocument(id));
+    }
+
+    @GetMapping("/{id}/embedding/estimate")
+    public ApiResponse<DocumentEmbeddingEstimateResponse> getEmbeddingEstimate(@PathVariable Long id) {
+        log.info("API request: GET /api/rag/documents/{}/embedding/estimate", id);
+        return ApiResponse.success(documentService.getEmbeddingEstimate(id));
+    }
+
+    @PostMapping("/{id}/embedding")
+    public ApiResponse<DocumentIndexResponse> embedDocument(@PathVariable Long id) {
+        log.info("API request: POST /api/rag/documents/{}/embedding", id);
+        return ApiResponse.success(documentService.embedDocument(id));
     }
 
     @GetMapping("/{id}/index/progress")

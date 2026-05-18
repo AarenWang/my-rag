@@ -22,9 +22,13 @@ import org.springframework.web.server.ResponseStatusException;
 public class DocumentIndexTaskService {
 
     private static final Logger log = LoggerFactory.getLogger(DocumentIndexTaskService.class);
-    private static final Set<DocumentStatus> SUBMITTABLE_STATUSES = Set.of(
+    private static final Set<DocumentStatus> INDEX_SUBMITTABLE_STATUSES = Set.of(
             DocumentStatus.UPLOADED,
             DocumentStatus.PARSED,
+            DocumentStatus.CHUNKED,
+            DocumentStatus.READY,
+            DocumentStatus.FAILED);
+    private static final Set<DocumentStatus> EMBEDDING_SUBMITTABLE_STATUSES = Set.of(
             DocumentStatus.CHUNKED,
             DocumentStatus.READY,
             DocumentStatus.FAILED);
@@ -53,14 +57,14 @@ public class DocumentIndexTaskService {
         this.indexTaskExecutor = indexTaskExecutor;
     }
 
-    public DocumentIndexResponse submit(Long documentId) {
+    public DocumentIndexResponse submitIndex(Long documentId) {
         RagDocument document = findDocumentOrThrow(documentId);
         DocumentStatus status = document.getStatus();
 
         if (RUNNING_STATUSES.contains(status) || isRunning(documentId)) {
             return new DocumentIndexResponse(documentId, "RUNNING", "Document index task is already running");
         }
-        if (!SUBMITTABLE_STATUSES.contains(status)) {
+        if (!INDEX_SUBMITTABLE_STATUSES.contains(status)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot index document with status: " + status);
         }
 
@@ -75,6 +79,35 @@ public class DocumentIndexTaskService {
 
         indexTaskExecutor.execute(() -> runIndex(documentId));
         return new DocumentIndexResponse(documentId, "QUEUED", "Document index task accepted");
+    }
+
+    public DocumentIndexResponse submitEmbedding(Long documentId) {
+        RagDocument document = findDocumentOrThrow(documentId);
+        DocumentStatus status = document.getStatus();
+
+        if (RUNNING_STATUSES.contains(status) || isRunning(documentId)) {
+            return new DocumentIndexResponse(documentId, "RUNNING", "Document task is already running");
+        }
+        if (!EMBEDDING_SUBMITTABLE_STATUSES.contains(status)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Cannot generate embeddings with status: " + status);
+        }
+        if (countChunks(documentId) == 0) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Cannot generate embeddings before chunks are created");
+        }
+
+        ProgressSnapshot queued = ProgressSnapshot.queued(documentId, document.getStatus().value(), countChunks(documentId));
+        ProgressSnapshot existing = progressByDocumentId.putIfAbsent(documentId, queued);
+        if (existing != null && existing.isRunning()) {
+            return new DocumentIndexResponse(documentId, "RUNNING", "Document task is already running");
+        }
+        if (existing != null) {
+            progressByDocumentId.put(documentId, queued);
+        }
+
+        indexTaskExecutor.execute(() -> runEmbedding(documentId));
+        return new DocumentIndexResponse(documentId, "QUEUED", "Document embedding task accepted");
     }
 
     public DocumentIndexProgressResponse getProgress(Long documentId) {
@@ -100,6 +133,20 @@ public class DocumentIndexTaskService {
             String message = throwable.getMessage() == null ? throwable.getClass().getSimpleName() : throwable.getMessage();
             markDocumentFailed(documentId, message);
             updateProgress(documentId, "FAILED", "FAILED", 100, "Index task failed", countChunks(documentId), message);
+        }
+    }
+
+    private void runEmbedding(Long documentId) {
+        updateProgress(documentId, "RUNNING", "QUEUED", 0, "Embedding task started", countChunks(documentId), null);
+        try {
+            indexService.embedDocument(documentId, (stage, percent, message, chunkCount) ->
+                    updateProgress(documentId, "RUNNING", stage, percent, message, chunkCount, null));
+            updateProgress(documentId, "SUCCEEDED", "READY", 100, "Embedding task completed", countChunks(documentId), null);
+        } catch (Throwable throwable) {
+            log.error("Async embedding task failed, documentId: {}", documentId, throwable);
+            String message = throwable.getMessage() == null ? throwable.getClass().getSimpleName() : throwable.getMessage();
+            markDocumentFailed(documentId, message);
+            updateProgress(documentId, "FAILED", "FAILED", 100, "Embedding task failed", countChunks(documentId), message);
         }
     }
 

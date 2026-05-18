@@ -50,6 +50,27 @@ Swagger UI：
 http://localhost:8080/swagger-ui.html
 ```
 
+### DashScope embedding
+
+The backend embedding client supports DashScope through its OpenAI-compatible API.
+Use the following local environment variables, or put equivalent values in
+`backend/rag-service/application-local-secret.yml`.
+
+```powershell
+$env:RAG_EMBEDDING_PROVIDER='dashscope'
+$env:RAG_EMBEDDING_BASE_URL='https://dashscope.aliyuncs.com/compatible-mode/v1'
+$env:RAG_EMBEDDING_API_KEY='<your-dashscope-api-key>'
+$env:RAG_EMBEDDING_MODEL='text-embedding-v4'
+$env:RAG_EMBEDDING_DIMENSION='1024'
+$env:RAG_EMBEDDING_BATCH_SIZE='10'
+```
+
+For Singapore region, set:
+
+```powershell
+$env:RAG_EMBEDDING_BASE_URL='https://dashscope-intl.aliyuncs.com/compatible-mode/v1'
+```
+
 ## Frontend
 
 前端位于 `frontend/`，采用 pnpm workspace、Vite、React、TypeScript、React Router、TanStack Query、Ant Design。

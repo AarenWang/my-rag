@@ -1,10 +1,14 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/my_rag
-    username: rag
-    password: rag
+    url: ${RAG_DATASOURCE_URL:jdbc:postgresql://localhost:5432/my_rag}
+    username: ${RAG_DATASOURCE_USERNAME:rag}
+    password: ${RAG_DATASOURCE_PASSWORD:rag}
 
 rag:
   storage:
-    upload-dir: D:\data\my-rag\uploads
-
+    upload-dir: ${RAG_UPLOAD_DIR:uploads/documents}
+  model:
+    embedding-provider: ${RAG_EMBEDDING_PROVIDER:mock}
+    embedding-api-key: ${RAG_EMBEDDING_API_KEY:}
+    chat-provider: ${RAG_CHAT_PROVIDER:mock}
+    chat-api-key: ${RAG_CHAT_API_KEY:}

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.my.rag.chunk.entity.RagDocumentChunk;
 import com.my.rag.chunk.repository.RagDocumentChunkMapper;
 import com.my.rag.config.RagProperties;
+import com.my.rag.embedding.repository.RagChunkEmbeddingMapper;
 import com.my.rag.parser.dto.Chapter;
 import com.my.rag.parser.dto.ParsedDocument;
 import java.nio.charset.StandardCharsets;
@@ -25,10 +26,15 @@ public class ChunkService {
     private static final Logger log = LoggerFactory.getLogger(ChunkService.class);
 
     private final RagDocumentChunkMapper chunkMapper;
+    private final RagChunkEmbeddingMapper embeddingMapper;
     private final RagProperties ragProperties;
 
-    public ChunkService(RagDocumentChunkMapper chunkMapper, RagProperties ragProperties) {
+    public ChunkService(
+            RagDocumentChunkMapper chunkMapper,
+            RagChunkEmbeddingMapper embeddingMapper,
+            RagProperties ragProperties) {
         this.chunkMapper = chunkMapper;
+        this.embeddingMapper = embeddingMapper;
         this.ragProperties = ragProperties;
     }
 
@@ -67,6 +73,7 @@ public class ChunkService {
     }
 
     private void deleteChunksByDocumentId(Long documentId) {
+        embeddingMapper.deleteByDocumentId(documentId);
         chunkMapper.delete(
                 new LambdaQueryWrapper<RagDocumentChunk>()
                         .eq(RagDocumentChunk::getDocumentId, documentId)

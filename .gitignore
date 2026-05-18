@@ -19,4 +19,4 @@ uploads/
 .env
 .env.local
 application-local-secret.yml
-
+application-*-secret.yml

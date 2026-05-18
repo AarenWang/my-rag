@@ -4,6 +4,7 @@ import com.my.rag.chunk.service.ChunkService;
 import com.my.rag.document.entity.RagDocument;
 import com.my.rag.document.enums.DocumentStatus;
 import com.my.rag.document.repository.RagDocumentMapper;
+import com.my.rag.embedding.service.EmbeddingService;
 import com.my.rag.parser.dto.Chapter;
 import com.my.rag.parser.dto.ParsedDocument;
 import com.my.rag.parser.service.ChapterRecognitionService;
@@ -22,18 +23,21 @@ public class DocumentIndexService {
     private final DocumentParseService parseService;
     private final ChapterRecognitionService chapterService;
     private final ChunkService chunkService;
+    private final EmbeddingService embeddingService;
 
     public DocumentIndexService(
             RagDocumentMapper documentMapper,
             DocumentLifecycleService lifecycleService,
             DocumentParseService parseService,
             ChapterRecognitionService chapterService,
-            ChunkService chunkService) {
+            ChunkService chunkService,
+            EmbeddingService embeddingService) {
         this.documentMapper = documentMapper;
         this.lifecycleService = lifecycleService;
         this.parseService = parseService;
         this.chapterService = chapterService;
         this.chunkService = chunkService;
+        this.embeddingService = embeddingService;
     }
 
     public void indexDocument(Long documentId, IndexProgressListener progressListener) {
@@ -76,6 +80,44 @@ public class DocumentIndexService {
 
         } catch (Exception e) {
             log.error("Index process failed for documentId: {}", documentId, e);
+            if (document.getStatus() != DocumentStatus.FAILED) {
+                lifecycleService.fail(document, e.getMessage());
+                documentMapper.updateById(document);
+            }
+            throw e;
+        }
+    }
+
+    public void embedDocument(Long documentId, IndexProgressListener progressListener) {
+        log.info("Starting embedding process for documentId: {}", documentId);
+
+        RagDocument document = documentMapper.selectById(documentId);
+        if (document == null) {
+            log.error("Document not found: {}", documentId);
+            throw new IllegalArgumentException("Document not found: " + documentId);
+        }
+
+        try {
+            int chunkCount = chunkService.getChunksByDocumentId(documentId).size();
+            if (chunkCount == 0) {
+                throw new IllegalStateException("Cannot generate embeddings before chunks are created");
+            }
+
+            progressListener.update("EMBEDDING", 10, "Generating embeddings", chunkCount);
+            lifecycleService.moveTo(document, DocumentStatus.EMBEDDING);
+            documentMapper.updateById(document);
+
+            int embeddingCount = embeddingService.embedDocumentChunks(documentId);
+            log.info("Embedding generation completed, embeddings: {}", embeddingCount);
+            progressListener.update("EMBEDDED", 95, "Embeddings generated: " + embeddingCount, chunkCount);
+
+            lifecycleService.moveTo(document, DocumentStatus.READY);
+            documentMapper.updateById(document);
+            progressListener.update("READY", 100, "Embedding process completed", chunkCount);
+
+            log.info("Embedding process completed successfully for documentId: {}", documentId);
+        } catch (Exception e) {
+            log.error("Embedding process failed for documentId: {}", documentId, e);
             if (document.getStatus() != DocumentStatus.FAILED) {
                 lifecycleService.fail(document, e.getMessage());
                 documentMapper.updateById(document);

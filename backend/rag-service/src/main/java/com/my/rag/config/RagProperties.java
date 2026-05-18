@@ -1,5 +1,6 @@
 package com.my.rag.config;
 
+import java.math.BigDecimal;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "rag")
@@ -122,9 +123,28 @@ public class RagProperties {
     }
 
     public static class Model {
+        private String embeddingProvider = "mock";
         private String embeddingModel = "bge-m3";
         private int embeddingDimension = 1024;
+        private int embeddingBatchSize = 32;
+        private String embeddingBaseUrl = "https://api.openai.com/v1";
+        private String embeddingApiKey;
+        private int embeddingRequestTimeoutSeconds = 60;
+        private BigDecimal embeddingPricePer1kTokens = new BigDecimal("0.0005");
+        private String chatProvider = "mock";
         private String chatModel = "deepseek-chat";
+        private String chatBaseUrl = "https://api.openai.com/v1";
+        private String chatApiKey;
+        private int chatRequestTimeoutSeconds = 60;
+        private Double chatTemperature = 0.2;
+
+        public String getEmbeddingProvider() {
+            return embeddingProvider;
+        }
+
+        public void setEmbeddingProvider(String embeddingProvider) {
+            this.embeddingProvider = embeddingProvider;
+        }
 
         public String getEmbeddingModel() {
             return embeddingModel;
@@ -142,12 +162,92 @@ public class RagProperties {
             this.embeddingDimension = embeddingDimension;
         }
 
+        public int getEmbeddingBatchSize() {
+            return embeddingBatchSize;
+        }
+
+        public void setEmbeddingBatchSize(int embeddingBatchSize) {
+            this.embeddingBatchSize = embeddingBatchSize;
+        }
+
+        public String getEmbeddingBaseUrl() {
+            return embeddingBaseUrl;
+        }
+
+        public void setEmbeddingBaseUrl(String embeddingBaseUrl) {
+            this.embeddingBaseUrl = embeddingBaseUrl;
+        }
+
+        public String getEmbeddingApiKey() {
+            return embeddingApiKey;
+        }
+
+        public void setEmbeddingApiKey(String embeddingApiKey) {
+            this.embeddingApiKey = embeddingApiKey;
+        }
+
+        public int getEmbeddingRequestTimeoutSeconds() {
+            return embeddingRequestTimeoutSeconds;
+        }
+
+        public void setEmbeddingRequestTimeoutSeconds(int embeddingRequestTimeoutSeconds) {
+            this.embeddingRequestTimeoutSeconds = embeddingRequestTimeoutSeconds;
+        }
+
+        public BigDecimal getEmbeddingPricePer1kTokens() {
+            return embeddingPricePer1kTokens;
+        }
+
+        public void setEmbeddingPricePer1kTokens(BigDecimal embeddingPricePer1kTokens) {
+            this.embeddingPricePer1kTokens = embeddingPricePer1kTokens;
+        }
+
         public String getChatModel() {
             return chatModel;
         }
 
         public void setChatModel(String chatModel) {
             this.chatModel = chatModel;
+        }
+
+        public String getChatProvider() {
+            return chatProvider;
+        }
+
+        public void setChatProvider(String chatProvider) {
+            this.chatProvider = chatProvider;
+        }
+
+        public String getChatBaseUrl() {
+            return chatBaseUrl;
+        }
+
+        public void setChatBaseUrl(String chatBaseUrl) {
+            this.chatBaseUrl = chatBaseUrl;
+        }
+
+        public String getChatApiKey() {
+            return chatApiKey;
+        }
+
+        public void setChatApiKey(String chatApiKey) {
+            this.chatApiKey = chatApiKey;
+        }
+
+        public int getChatRequestTimeoutSeconds() {
+            return chatRequestTimeoutSeconds;
+        }
+
+        public void setChatRequestTimeoutSeconds(int chatRequestTimeoutSeconds) {
+            this.chatRequestTimeoutSeconds = chatRequestTimeoutSeconds;
+        }
+
+        public Double getChatTemperature() {
+            return chatTemperature;
+        }
+
+        public void setChatTemperature(Double chatTemperature) {
+            this.chatTemperature = chatTemperature;
         }
     }
 
