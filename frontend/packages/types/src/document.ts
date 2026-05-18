@@ -27,6 +27,16 @@ export interface DocumentIndexResponse {
   message: string;
 }
 
+export interface DocumentEmbeddingEstimate {
+  documentId: number;
+  chunkCount: number;
+  estimatedTokens: number;
+  pricePer1kTokens: number;
+  estimatedCostCny: number;
+  model: string;
+  dimension: number;
+}
+
 export interface DocumentChunk {
   chunkId: number;
   documentId: number;

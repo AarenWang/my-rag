@@ -1,5 +1,6 @@
 import type {
   DocumentChunkListResponse,
+  DocumentEmbeddingEstimate,
   DocumentIndexResponse,
   DocumentStatus,
   DocumentSummary,
@@ -27,6 +28,16 @@ export function uploadDocument(file: File) {
 
 export function triggerDocumentIndex(documentId: number) {
   return request<DocumentIndexResponse>(`/api/rag/documents/${documentId}/index`, {
+    method: "POST"
+  });
+}
+
+export function getDocumentEmbeddingEstimate(documentId: number) {
+  return request<DocumentEmbeddingEstimate>(`/api/rag/documents/${documentId}/embedding/estimate`);
+}
+
+export function triggerDocumentEmbedding(documentId: number) {
+  return request<DocumentIndexResponse>(`/api/rag/documents/${documentId}/embedding`, {
     method: "POST"
   });
 }

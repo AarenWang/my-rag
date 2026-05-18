@@ -1,9 +1,16 @@
-import { getDocumentChunks, getDocuments, getDocumentStatus, triggerDocumentIndex } from "@my-rag/api";
-import type { DocumentChunk } from "@my-rag/types";
+import {
+  getDocumentChunks,
+  getDocumentEmbeddingEstimate,
+  getDocuments,
+  getDocumentStatus,
+  triggerDocumentEmbedding,
+  triggerDocumentIndex
+} from "@my-rag/api";
+import type { DocumentChunk, DocumentEmbeddingEstimate } from "@my-rag/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Alert, Button, Card, Descriptions, Empty, List, Skeleton, Space, Tag, Typography, message } from "antd";
-import { ArrowLeft, FileText, PlayCircle, RefreshCw } from "lucide-react";
-import { useMemo } from "react";
+import { Alert, Button, Card, Descriptions, Empty, List, Modal, Skeleton, Space, Tag, Typography, message } from "antd";
+import { ArrowLeft, FileText, PlayCircle, RefreshCw, Sparkles } from "lucide-react";
+import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 const { Paragraph, Text } = Typography;
@@ -32,6 +39,34 @@ function canIndex(status?: string) {
   return status ? ["UPLOADED", "PARSED", "CHUNKED", "READY", "FAILED"].includes(status) : false;
 }
 
+function canEmbed(status?: string) {
+  return status ? ["CHUNKED", "READY", "FAILED"].includes(status) : false;
+}
+
+function formatCost(value: number) {
+  return value.toFixed(8).replace(/\.?0+$/, "");
+}
+
+function EstimateDetails({ estimate }: { estimate: DocumentEmbeddingEstimate }) {
+  return (
+    <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+      <Descriptions column={1} size="small" bordered>
+        <Descriptions.Item label="Chunks">{estimate.chunkCount}</Descriptions.Item>
+        <Descriptions.Item label="Estimated tokens">{estimate.estimatedTokens.toLocaleString()}</Descriptions.Item>
+        <Descriptions.Item label="Price">CNY {estimate.pricePer1kTokens} / 1K tokens</Descriptions.Item>
+        <Descriptions.Item label="Estimated cost">
+          CNY {formatCost(Number(estimate.estimatedCostCny))}
+        </Descriptions.Item>
+        <Descriptions.Item label="Model">{estimate.model}</Descriptions.Item>
+        <Descriptions.Item label="Dimension">{estimate.dimension}</Descriptions.Item>
+      </Descriptions>
+      <Text type="secondary">
+        This is an estimate based on local chunk token counts. The final charge is subject to the DashScope bill.
+      </Text>
+    </Space>
+  );
+}
+
 function previewContent(chunk: DocumentChunk) {
   if (!chunk.content) {
     return "No content";
@@ -48,6 +83,7 @@ export default function DocumentDetail() {
   const { documentId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [estimateLoading, setEstimateLoading] = useState(false);
   const numericDocumentId = Number(documentId);
   const isValidDocumentId = Number.isFinite(numericDocumentId) && numericDocumentId > 0;
 
@@ -85,6 +121,19 @@ export default function DocumentDetail() {
     }
   });
 
+  const embeddingMutation = useMutation({
+    mutationFn: () => triggerDocumentEmbedding(numericDocumentId),
+    onSuccess: (result) => {
+      message.success(result.data.message || "Embedding task submitted");
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+      queryClient.invalidateQueries({ queryKey: ["document-status", numericDocumentId] });
+      queryClient.invalidateQueries({ queryKey: ["document-chunks", numericDocumentId] });
+    },
+    onError: (error: Error) => {
+      message.error(`Embedding failed: ${error.message}`);
+    }
+  });
+
   const document = useMemo(
     () => documentsQuery.data?.data.find((item) => item.documentId === numericDocumentId),
     [documentsQuery.data?.data, numericDocumentId]
@@ -99,6 +148,41 @@ export default function DocumentDetail() {
     chunksQuery.isError ? `chunks: ${getErrorMessage(chunksQuery.error)}` : null
   ].filter(Boolean);
   const visibleDocumentError = status === "FAILED" ? statusQuery.data?.data.errorMessage : null;
+
+  const handleIndex = () => {
+    Modal.confirm({
+      title: "Confirm re-index",
+      content: "This will parse the document and rebuild chunks. Embedding will require a separate confirmation.",
+      okText: "Re-index",
+      cancelText: "Cancel",
+      onOk: () => indexMutation.mutate()
+    });
+  };
+
+  const handleEmbedding = async () => {
+    setEstimateLoading(true);
+    try {
+      const result = await getDocumentEmbeddingEstimate(numericDocumentId);
+      const estimate = result.data;
+      if (estimate.chunkCount === 0) {
+        message.warning("No chunks found. Run re-index first.");
+        return;
+      }
+
+      Modal.confirm({
+        title: "Confirm embedding cost",
+        content: <EstimateDetails estimate={estimate} />,
+        okText: "Run embedding",
+        cancelText: "Cancel",
+        width: 560,
+        onOk: () => embeddingMutation.mutate()
+      });
+    } catch (error) {
+      message.error(`Failed to estimate embedding cost: ${getErrorMessage(error)}`);
+    } finally {
+      setEstimateLoading(false);
+    }
+  };
 
   if (!isValidDocumentId) {
     return (
@@ -132,13 +216,21 @@ export default function DocumentDetail() {
             Refresh
           </Button>
           <Button
-            type="primary"
             icon={<PlayCircle size={16} />}
             disabled={!canIndex(status)}
             loading={indexMutation.isPending}
-            onClick={() => indexMutation.mutate()}
+            onClick={handleIndex}
           >
             Re-index
+          </Button>
+          <Button
+            type="primary"
+            icon={<Sparkles size={16} />}
+            disabled={!canEmbed(status)}
+            loading={estimateLoading || embeddingMutation.isPending}
+            onClick={handleEmbedding}
+          >
+            Embedding
           </Button>
         </Space>
       </div>

@@ -1,39 +1,51 @@
 import { useState } from "react";
-import { getDocuments, uploadDocument, triggerDocumentIndex } from "@my-rag/api";
-import type { DocumentSummary } from "@my-rag/types";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Button, Card, Empty, Space, Table, Upload, message, Tag, Modal } from "antd";
-import { Inbox, Eye, PlayCircle, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import {
+  getDocumentEmbeddingEstimate,
+  getDocuments,
+  triggerDocumentEmbedding,
+  triggerDocumentIndex,
+  uploadDocument
+} from "@my-rag/api";
+import type { DocumentEmbeddingEstimate, DocumentSummary } from "@my-rag/types";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Button, Card, Descriptions, Empty, Modal, Space, Table, Tag, Typography, Upload, message } from "antd";
+import { Eye, Inbox, PlayCircle, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import type { UploadProps } from "antd";
+import DocumentStatusBadge from "../components/DocumentStatusBadge";
 
-const StatusTag = ({ status }: { status: string }) => {
-  const statusConfig: Record<string, { color: string; icon: React.ReactNode; text: string }> = {
-    UPLOADED: { color: "blue", icon: <Inbox size={12} />, text: "已上传" },
-    PARSING: { color: "cyan", icon: <Loader2 size={12} className="animate-spin" />, text: "解析中" },
-    PARSED: { color: "purple", icon: <CheckCircle size={12} />, text: "已解析" },
-    CHUNKING: { color: "orange", icon: <Loader2 size={12} className="animate-spin" />, text: "切分中" },
-    CHUNKED: { color: "geekblue", icon: <CheckCircle size={12} />, text: "已切分" },
-    EMBEDDING: { color: "gold", icon: <Loader2 size={12} className="animate-spin" />, text: "向量化中" },
-    READY: { color: "green", icon: <CheckCircle size={12} />, text: "就绪" },
-    FAILED: { color: "red", icon: <AlertCircle size={12} />, text: "失败" }
-  };
+const { Text } = Typography;
 
-  const config = statusConfig[status] || { color: "default", icon: null, text: status };
+function formatCost(value: number) {
+  return value.toFixed(8).replace(/\.?0+$/, "");
+}
 
+function EstimateDetails({ estimate }: { estimate: DocumentEmbeddingEstimate }) {
   return (
-    <Tag color={config.color} icon={config.icon}>
-      {config.text}
-    </Tag>
+    <Space direction="vertical" size="middle" style={{ width: "100%" }}>
+      <Descriptions column={1} size="small" bordered>
+        <Descriptions.Item label="Chunks">{estimate.chunkCount}</Descriptions.Item>
+        <Descriptions.Item label="Estimated tokens">{estimate.estimatedTokens.toLocaleString()}</Descriptions.Item>
+        <Descriptions.Item label="Price">CNY {estimate.pricePer1kTokens} / 1K tokens</Descriptions.Item>
+        <Descriptions.Item label="Estimated cost">
+          CNY {formatCost(Number(estimate.estimatedCostCny))}
+        </Descriptions.Item>
+        <Descriptions.Item label="Model">{estimate.model}</Descriptions.Item>
+        <Descriptions.Item label="Dimension">{estimate.dimension}</Descriptions.Item>
+      </Descriptions>
+      <Text type="secondary">
+        This is an estimate based on local chunk token counts. The final charge is subject to the DashScope bill.
+      </Text>
+    </Space>
   );
-};
+}
 
 export default function Documents() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [confirmLoading, setConfirmLoading] = useState<number | null>(null);
+  const [loadingAction, setLoadingAction] = useState<string | null>(null);
 
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["documents"],
     queryFn: getDocuments,
     retry: false
@@ -42,26 +54,38 @@ export default function Documents() {
   const uploadMutation = useMutation({
     mutationFn: (file: File) => uploadDocument(file),
     onSuccess: (result) => {
-      message.success(result.data.duplicate ? "文件已存在，无需重复上传" : "文档上传成功");
+      message.success(result.data.duplicate ? "Document already exists" : "Document uploaded");
       queryClient.invalidateQueries({ queryKey: ["documents"] });
     },
     onError: (error: Error) => {
-      message.error(`上传失败: ${error.message}`);
+      message.error(`Upload failed: ${error.message}`);
     }
   });
 
   const indexMutation = useMutation({
     mutationFn: (documentId: number) => triggerDocumentIndex(documentId),
-    onSuccess: () => {
-      message.success("Index 任务已触发");
+    onMutate: (documentId) => setLoadingAction(`index-${documentId}`),
+    onSuccess: (result) => {
+      message.success(result.data.message || "Index task submitted");
       queryClient.invalidateQueries({ queryKey: ["documents"] });
     },
     onError: (error: Error) => {
-      message.error(`触发 Index 失败: ${error.message}`);
+      message.error(`Index failed: ${error.message}`);
     },
-    onSettled: () => {
-      setConfirmLoading(null);
-    }
+    onSettled: () => setLoadingAction(null)
+  });
+
+  const embeddingMutation = useMutation({
+    mutationFn: (documentId: number) => triggerDocumentEmbedding(documentId),
+    onMutate: (documentId) => setLoadingAction(`embedding-${documentId}`),
+    onSuccess: (result) => {
+      message.success(result.data.message || "Embedding task submitted");
+      queryClient.invalidateQueries({ queryKey: ["documents"] });
+    },
+    onError: (error: Error) => {
+      message.error(`Embedding failed: ${error.message}`);
+    },
+    onSettled: () => setLoadingAction(null)
   });
 
   const uploadProps: UploadProps = {
@@ -76,60 +100,86 @@ export default function Documents() {
 
   const handleIndex = (documentId: number) => {
     Modal.confirm({
-      title: "确认触发 Index",
-      content: "确定要对此文档进行解析、切分和向量化处理吗？",
-      okText: "确定",
-      cancelText: "取消",
-      onOk: () => {
-        setConfirmLoading(documentId);
-        indexMutation.mutate(documentId);
-      }
+      title: "Confirm re-index",
+      content: "This will parse the document and rebuild chunks. Embedding will require a separate confirmation.",
+      okText: "Re-index",
+      cancelText: "Cancel",
+      onOk: () => indexMutation.mutate(documentId)
     });
   };
 
-  const canIndex = (status: string) => {
-    return ["UPLOADED", "PARSED", "CHUNKED", "FAILED"].includes(status);
+  const handleEmbedding = async (documentId: number) => {
+    setLoadingAction(`estimate-${documentId}`);
+    try {
+      const result = await getDocumentEmbeddingEstimate(documentId);
+      const estimate = result.data;
+      if (estimate.chunkCount === 0) {
+        message.warning("No chunks found. Run re-index first.");
+        return;
+      }
+
+      Modal.confirm({
+        title: "Confirm embedding cost",
+        content: <EstimateDetails estimate={estimate} />,
+        okText: "Run embedding",
+        cancelText: "Cancel",
+        width: 560,
+        onOk: () => embeddingMutation.mutate(documentId)
+      });
+    } catch (error) {
+      message.error(`Failed to estimate embedding cost: ${error instanceof Error ? error.message : "Unknown error"}`);
+    } finally {
+      setLoadingAction(null);
+    }
   };
 
+  const canIndex = (status: string) => ["UPLOADED", "PARSED", "CHUNKED", "READY", "FAILED"].includes(status);
+  const canEmbed = (status: string) => ["CHUNKED", "READY", "FAILED"].includes(status);
+
   const columns = [
-    { title: "标题", dataIndex: "title", key: "title" },
-    { title: "文件名", dataIndex: "fileName", key: "fileName" },
-    { 
-      title: "类型", 
-      dataIndex: "fileType", 
+    { title: "Title", dataIndex: "title", key: "title" },
+    { title: "File name", dataIndex: "fileName", key: "fileName" },
+    {
+      title: "Type",
+      dataIndex: "fileType",
       key: "fileType",
-      render: (type: string) => (
-        <Tag>{type.toUpperCase()}</Tag>
-      )
-    },
-    { 
-      title: "状态", 
-      dataIndex: "status", 
-      key: "status",
-      render: (status: string) => <StatusTag status={status} />
+      render: (type: string) => <Tag>{type.toUpperCase()}</Tag>
     },
     {
-      title: "操作",
+      title: "Status",
+      dataIndex: "status",
+      key: "status",
+      render: (status: string) => <DocumentStatusBadge status={status} />
+    },
+    {
+      title: "Actions",
       key: "actions",
-      render: (_: any, record: DocumentSummary) => (
-        <Space size="small">
-          <Button 
-            size="small" 
-            icon={<Eye size={14} />}
-            onClick={() => navigate(`/documents/${record.documentId}`)}
-          >
-            查看
+      render: (_: unknown, record: DocumentSummary) => (
+        <Space size="small" wrap>
+          <Button size="small" icon={<Eye size={14} />} onClick={() => navigate(`/documents/${record.documentId}`)}>
+            View
           </Button>
-          <Button 
-            size="small" 
-            type="primary"
-            ghost
+          <Button
+            size="small"
             icon={<PlayCircle size={14} />}
-            disabled={!canIndex(record.status) || confirmLoading === record.documentId}
-            loading={confirmLoading === record.documentId}
+            disabled={!canIndex(record.status)}
+            loading={loadingAction === `index-${record.documentId}`}
             onClick={() => handleIndex(record.documentId)}
           >
-            Index
+            Re-index
+          </Button>
+          <Button
+            size="small"
+            type="primary"
+            ghost
+            icon={<Sparkles size={14} />}
+            disabled={!canEmbed(record.status)}
+            loading={
+              loadingAction === `estimate-${record.documentId}` || loadingAction === `embedding-${record.documentId}`
+            }
+            onClick={() => handleEmbedding(record.documentId)}
+          >
+            Embedding
           </Button>
         </Space>
       )
@@ -140,16 +190,12 @@ export default function Documents() {
     <section className="page">
       <div className="page-heading">
         <div>
-          <h1>文档</h1>
-          <p>上传电子书、观察处理状态，在这里触发 index 流程。</p>
+          <h1>Documents</h1>
+          <p>Upload ebooks, rebuild chunks, and confirm embedding cost before vector generation.</p>
         </div>
         <Upload {...uploadProps}>
-          <Button 
-            type="primary" 
-            icon={<Inbox size={16} />}
-            loading={uploadMutation.isPending}
-          >
-            {uploadMutation.isPending ? "上传中..." : "上传文档"}
+          <Button type="primary" icon={<Inbox size={16} />} loading={uploadMutation.isPending}>
+            {uploadMutation.isPending ? "Uploading..." : "Upload document"}
           </Button>
         </Upload>
       </div>
@@ -158,11 +204,10 @@ export default function Documents() {
           loading={isLoading}
           rowKey="documentId"
           dataSource={data?.data ?? []}
-          locale={{ emptyText: <Empty description="暂无文档，点击上方按钮上传吧！" /> }}
+          locale={{ emptyText: <Empty description="No documents yet." /> }}
           columns={columns}
         />
       </Card>
     </section>
   );
 }
-
