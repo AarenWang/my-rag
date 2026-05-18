@@ -4,3 +4,7 @@ spring:
     username: rag
     password: rag
 
+rag:
+  storage:
+    upload-dir: D:\data\my-rag\uploads
+
