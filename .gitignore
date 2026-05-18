@@ -18,4 +18,5 @@ uploads/
 # Environment
 .env
 .env.local
+application-local-secret.yml
 

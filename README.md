@@ -1,0 +1,62 @@
+# My RAG
+
+中文电子书 RAG MVP，用于跑通文档解析、chunk 切分、embedding、pgvector 检索和基于来源引用的问答闭环。
+
+## Backend
+
+后端位于 `backend/`，采用 Java 17、Spring Boot 3、Maven 多模块、PostgreSQL + pgvector、Flyway、MyBatis Plus。
+
+### 外部 PostgreSQL 配置
+
+本项目默认使用外部 PostgreSQL 服务。数据库需要提前满足：
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+本地推荐通过环境变量传入连接信息：
+
+```powershell
+$env:RAG_DATASOURCE_URL='jdbc:postgresql://<host>:5432/<database>?sslmode=disable'
+$env:RAG_DATASOURCE_USERNAME='<user>'
+$env:RAG_DATASOURCE_PASSWORD='<password>'
+```
+
+也可以创建本地私密配置文件：
+
+```text
+backend/rag-service/src/main/resources/application-local-secret.yml
+```
+
+该文件已被 `.gitignore` 排除，不要提交数据库密码。
+
+### 启动后端
+
+```powershell
+cd backend
+mvn -pl rag-service -am package -DskipTests
+java -jar rag-service/target/rag-service-0.0.1-SNAPSHOT.jar --spring.profiles.active=local-secret
+```
+
+健康检查：
+
+```text
+GET http://localhost:8080/api/rag/health
+```
+
+Swagger UI：
+
+```text
+http://localhost:8080/swagger-ui.html
+```
+
+## Frontend
+
+前端位于 `frontend/`，采用 pnpm workspace、Vite、React、TypeScript、React Router、TanStack Query、Ant Design。
+
+```powershell
+cd frontend
+pnpm install
+pnpm dev:web
+```
+

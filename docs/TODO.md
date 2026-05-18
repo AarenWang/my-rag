@@ -28,21 +28,21 @@ MVP 优先支持 `TXT`、`Markdown`、`EPUB`，暂不做复杂 Agent、复杂 PD
 
 ### 1. 本地基础设施
 
-- [ ] 准备外部 PostgreSQL 服务并确认已安装 pgvector 扩展
-- [ ] 配置 `RAG_DATASOURCE_URL`、`RAG_DATASOURCE_USERNAME`、`RAG_DATASOURCE_PASSWORD`
-- [ ] 验证 Flyway 可成功执行 `V1__init_pgvector.sql`
-- [ ] 验证 Flyway 可成功创建 `rag_document`、`rag_document_chunk`、`rag_chunk_embedding`、`rag_chat_log`
-- [ ] 补充外部数据库连接和启动说明到根目录 `README.md`
+- [x] 准备外部 PostgreSQL 服务并确认已安装 pgvector 扩展
+- [x] 配置本地 Spring Boot 数据库连接
+- [x] 验证 Flyway 可成功执行 `V1__init_pgvector.sql`
+- [x] 验证 Flyway 可成功创建 `rag_document`、`rag_document_chunk`、`rag_chunk_embedding`、`rag_chat_log`
+- [x] 补充外部数据库连接和启动说明到根目录 `README.md`
 
 ### 2. 文档领域模型
 
-- [ ] 新增 `DocumentStatus` 枚举：`UPLOADED`、`PARSING`、`PARSED`、`CHUNKING`、`CHUNKED`、`EMBEDDING`、`READY`、`FAILED`
-- [ ] 新增 `RagDocument` entity
-- [ ] 新增 `RagDocumentMapper`
-- [ ] 新增 `DocumentService`
-- [ ] 实现文档列表查询接口：`GET /api/rag/documents`
-- [ ] 实现文档状态查询接口：`GET /api/rag/documents/{id}/status`
-- [ ] 统一 `created_at`、`updated_at` 字段处理
+- [x] 新增 `DocumentStatus` 枚举：`UPLOADED`、`PARSING`、`PARSED`、`CHUNKING`、`CHUNKED`、`EMBEDDING`、`READY`、`FAILED`
+- [x] 新增 `RagDocument` entity
+- [x] 新增 `RagDocumentMapper`
+- [x] 新增 `DocumentService`
+- [x] 实现文档列表查询接口：`GET /api/rag/documents`
+- [x] 实现文档状态查询接口：`GET /api/rag/documents/{id}/status`
+- [x] 统一 `created_at`、`updated_at` 字段处理
 
 ### 3. 文件上传与去重
 
