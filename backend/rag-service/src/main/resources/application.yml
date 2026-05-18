@@ -1,0 +1,48 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: rag-service
+  datasource:
+    url: ${RAG_DATASOURCE_URL:jdbc:postgresql://localhost:5432/my_rag}
+    username: ${RAG_DATASOURCE_USERNAME:rag}
+    password: ${RAG_DATASOURCE_PASSWORD:rag}
+    driver-class-name: org.postgresql.Driver
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  mapper-locations: classpath*:/mapper/**/*.xml
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+rag:
+  chunk:
+    min-chars: 300
+    max-chars: 1000
+    overlap-chars: 150
+  retrieval:
+    default-top-k: 20
+    context-top-k: 8
+    score-threshold: 0.35
+  model:
+    embedding-model: bge-m3
+    embedding-dimension: 1024
+    chat-model: deepseek-chat
+

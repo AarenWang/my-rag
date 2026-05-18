@@ -1,0 +1,21 @@
+# Java / Maven
+target/
+*.class
+
+# Node / frontend
+node_modules/
+dist/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Logs and local runtime files
+*.log
+uploads/
+
+# Environment
+.env
+.env.local
+
