@@ -57,51 +57,57 @@ MVP 优先支持 `TXT`、`Markdown`、`EPUB`，暂不做复杂 Agent、复杂 PD
 
 ### 4. 文本解析
 
-- [ ] 设计 `DocumentParser` 策略接口
-- [ ] 实现 `TxtDocumentParser`
-- [ ] 实现 `MarkdownDocumentParser`
-- [ ] 初步实现 `EpubDocumentParser`，可优先基于 Tika
-- [ ] 保留 `PdfDocumentParser` 扩展点，复杂 PDF 放到后续阶段
-- [ ] 实现基础文本清洗：空行、页眉页脚噪声、重复段落、目录噪声
-- [ ] 文本解析为空时将文档状态置为 `FAILED`
+- [x] 设计 `DocumentParser` 策略接口
+- [x] 实现 `TxtDocumentParser`
+- [x] 实现 `MarkdownDocumentParser`
+- [x] 初步实现 `EpubDocumentParser`，可优先基于 Tika
+- [x] 保留 `PdfDocumentParser` 扩展点，复杂 PDF 放到后续阶段
+- [x] 实现基础文本清洗：空行、页眉页脚噪声、重复段落、目录噪声
+- [x] 文本解析为空时将文档状态置为 `FAILED`
 
 ### 5. 章节识别
 
-- [ ] 设计章节识别结果模型
-- [ ] 支持常见中文章节标题：`第X章`、`第X节`、`一、`、`1.`
-- [ ] 无法识别章节时使用默认章节
-- [ ] 保存章节标题到 chunk metadata
+- [x] 设计章节识别结果模型
+- [x] 支持常见中文章节标题：`第X章`、`第X节`、`一、`、`1.`
+- [x] 无法识别章节时使用默认章节
+- [x] 保存章节标题到 chunk metadata
 
 ### 6. Chunk 切分
 
 - [x] 新增 `RagDocumentChunk` entity
-- [ ] 新增 `RagDocumentChunkMapper`
-- [ ] 新增 `ChunkService`
-- [ ] 按章节和自然段合并生成 chunk
-- [ ] 支持配置 `minChars`、`maxChars`、`overlapChars`
-- [ ] 每个 chunk 保存 `chapterTitle`、`chunkIndex`、`startParagraph`、`endParagraph`、`contentHash`、`tokenCount`
-- [ ] 实现 chunk 内容 hash 去重
-- [ ] 实现 chunk 查询接口：`GET /api/rag/chunks?documentId=xxx`
+- [x] 新增 `RagDocumentChunkMapper`
+- [x] 新增 `ChunkService`
+- [x] 按章节和自然段合并生成 chunk
+- [x] 支持配置 `minChars`、`maxChars`、`overlapChars`
+- [x] 每个 chunk 保存 `chapterTitle`、`chunkIndex`、`startParagraph`、`endParagraph`、`contentHash`、`tokenCount`
+- [x] 实现 chunk 内容 hash 去重
+- [x] 实现 chunk 查询接口：`GET /api/rag/chunks?documentId=xxx`
 
 ### 7. 文档 Index 流程
 
-- [ ] 实现触发处理接口：`POST /api/rag/documents/{id}/index`
-- [ ] 串联解析、章节识别、chunk 切分、embedding 入库
-- [ ] 实现文档状态流转：`UPLOADED -> PARSING -> PARSED -> CHUNKING -> CHUNKED -> EMBEDDING -> READY`
-- [ ] 任意步骤失败时状态置为 `FAILED` 并记录 `errorMessage`
-- [ ] MVP 可以先同步执行，后续再改异步任务
+- [x] 实现触发处理接口：`POST /api/rag/documents/{id}/index`
+- [x] 串联解析、章节识别、chunk 切分（embedding 入库待后续实现）
+- [x] 实现文档状态流转：`UPLOADED -> PARSING -> PARSED -> CHUNKING -> CHUNKED`
+- [x] 任意步骤失败时状态置为 `FAILED` 并记录 `errorMessage`
+- [x] MVP 可以先同步执行，后续再改异步任务
+
+### 日志配置
+
+- [x] 添加 logback-spring.xml 日志配置
+- [x] 给所有 Controller 入口方法添加日志
+- [x] 给 Service 关键方法添加日志
 
 ### 8. Embedding
 
-- [ ] 设计 `EmbeddingClient` 接口
+- [x] 设计 `EmbeddingClient` 接口
 - [x] 设计 embedding 请求/响应 DTO
-- [ ] 支持通过配置选择 embedding 模型
-- [ ] 实现云端 embedding 调用，优先兼容 OpenAI 风格接口
+- [x] 支持通过配置选择 embedding 模型
+- [x] 实现云端 embedding 调用，优先兼容 OpenAI 风格接口
 - [x] 新增 `RagChunkEmbedding` entity
-- [ ] 新增 `RagChunkEmbeddingMapper`
-- [ ] 批量生成 chunk 向量
-- [ ] 将向量写入 `rag_chunk_embedding`
-- [ ] 处理 embedding 失败、限流、空向量、维度不匹配等异常
+- [x] 新增 `RagChunkEmbeddingMapper`
+- [x] 批量生成 chunk 向量
+- [x] 将向量写入 `rag_chunk_embedding`
+- [x] 处理 embedding 失败、限流、空向量、维度不匹配等异常
 
 ### 9. 检索
 
@@ -169,7 +175,7 @@ MVP 优先支持 `TXT`、`Markdown`、`EPUB`，暂不做复杂 Agent、复杂 PD
 ### 3. 页面实现
 
 - [ ] 实现 `Dashboard` 页面，展示文档数量、READY 数量、失败数、最近问答
-- [ ] 实现 `Documents` 页面，支持上传文档、查看文档列表、触发 index、查看状态
+- [x] 实现 `Documents` 页面，支持上传文档、查看文档列表、触发 index、查看状态
 - [ ] 实现 `DocumentDetail` 页面，展示文档 metadata 和 chunk 列表
 - [ ] 实现 `Chat` 页面，支持选择文档、输入问题、展示回答和引用来源
 - [ ] 实现 `Settings` 页面，展示 chunk、retrieval、model 配置
@@ -177,19 +183,19 @@ MVP 优先支持 `TXT`、`Markdown`、`EPUB`，暂不做复杂 Agent、复杂 PD
 ### 4. 前端组件
 
 - [ ] 实现 `UploadPanel`
-- [ ] 实现 `DocumentStatusBadge`
+- [x] 实现 `DocumentStatusBadge` (内嵌在 Documents 页面中)
 - [ ] 实现 `ChunkPreview`
 - [ ] 实现 `SourceList`
 - [ ] 实现 `ChatMessage`
-- [ ] 实现基础错误提示和加载状态
+- [x] 实现基础错误提示和加载状态 (使用 Ant Design 组件)
 
 ### 5. 前端 API Client
 
-- [ ] 封装 `GET /api/rag/documents`
-- [ ] 封装 `POST /api/rag/documents/upload`
-- [ ] 封装 `POST /api/rag/documents/{id}/index` (后端接口待实现)
-- [ ] 封装 `GET /api/rag/documents/{id}/status`
-- [ ] 封装 `GET /api/rag/chunks?documentId=xxx` (后端接口待实现)
+- [x] 封装 `GET /api/rag/documents`
+- [x] 封装 `POST /api/rag/documents/upload`
+- [x] 封装 `POST /api/rag/documents/{id}/index` (后端接口已实现)
+- [x] 封装 `GET /api/rag/documents/{id}/status`
+- [ ] 封装 `GET /api/rag/chunks?documentId=xxx` (后端接口已实现)
 - [ ] 封装 `POST /api/rag/chat` (后端接口待实现)
 
 ## 页面功能规划
