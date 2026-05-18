@@ -21,3 +21,25 @@ export interface DocumentUploadResponse {
   duplicate: boolean;
 }
 
+export interface DocumentIndexResponse {
+  documentId: number;
+  status: string;
+  message: string;
+}
+
+export interface DocumentChunk {
+  chunkId: number;
+  documentId: number;
+  chapterTitle?: string | null;
+  chunkIndex: number;
+  startParagraph?: number | null;
+  endParagraph?: number | null;
+  content: string;
+  contentPreview?: string | null;
+  tokenCount?: number | null;
+}
+
+export interface DocumentChunkListResponse {
+  documentId: number;
+  chunks: DocumentChunk[];
+}

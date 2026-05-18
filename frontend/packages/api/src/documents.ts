@@ -1,4 +1,10 @@
-import type { DocumentStatus, DocumentSummary, DocumentUploadResponse } from "@my-rag/types";
+import type {
+  DocumentChunkListResponse,
+  DocumentIndexResponse,
+  DocumentStatus,
+  DocumentSummary,
+  DocumentUploadResponse
+} from "@my-rag/types";
 import { request } from "./client";
 
 export function getDocuments() {
@@ -20,8 +26,11 @@ export function uploadDocument(file: File) {
 }
 
 export function triggerDocumentIndex(documentId: number) {
-  return request<void>(`/api/rag/documents/${documentId}/index`, {
+  return request<DocumentIndexResponse>(`/api/rag/documents/${documentId}/index`, {
     method: "POST"
   });
 }
 
+export function getDocumentChunks(documentId: number) {
+  return request<DocumentChunkListResponse>(`/api/rag/chunks?documentId=${documentId}`);
+}
