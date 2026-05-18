@@ -114,8 +114,9 @@ public class DocumentService {
             return new DocumentStatusResponse(documentId, "NOT_FOUND", "Document not found");
         }
         log.debug("Document status, documentId: {}, status: {}", documentId, document.getStatus());
+        String errorMessage = document.getStatus() == DocumentStatus.FAILED ? document.getErrorMessage() : null;
         return new DocumentStatusResponse(
-                document.getId(), document.getStatus().value(), document.getErrorMessage());
+                document.getId(), document.getStatus().value(), errorMessage);
     }
 
     public DocumentIndexResponse indexDocument(Long documentId) {
