@@ -213,13 +213,53 @@ public class DocumentService {
 
     private Path saveFile(byte[] bytes, String fileHash, String fileType) {
         try {
-            Path uploadDir = Path.of(ragProperties.getStorage().getUploadDir());
-            Files.createDirectories(uploadDir);
-            Path savedPath = uploadDir.resolve(fileHash + "." + fileType);
-            Files.write(savedPath, bytes);
-            return savedPath;
+            java.io.File uploadDir = new java.io.File(ragProperties.getStorage().getUploadDir());
+            log.info("Upload directory configured: {}", uploadDir.getAbsolutePath());
+            log.info("Upload directory exists: {}", uploadDir.exists());
+            if (!uploadDir.exists()) {
+                log.info("Creating upload directory...");
+                uploadDir.mkdirs();
+                log.info("Upload directory created successfully");
+            }
+            
+            String shortHash = fileHash.length() > 16 ? fileHash.substring(0, 16) : fileHash;
+            java.io.File savedFile = new java.io.File(uploadDir, shortHash + "." + fileType);
+            log.info("Saving file to: {}", savedFile.getAbsolutePath());
+            
+            if (savedFile.exists()) {
+                log.info("File already exists, skipping write: {}", savedFile.getAbsolutePath());
+            } else {
+                try {
+                    java.io.File tempFile = java.io.File.createTempFile("upload-", "." + fileType, uploadDir);
+                    try (java.io.FileOutputStream fos = new java.io.FileOutputStream(tempFile)) {
+                        fos.write(bytes);
+                    }
+                    log.info("Temp file saved: {}", tempFile.getAbsolutePath());
+                    
+                    if (savedFile.exists()) {
+                        log.info("Target file created by another process, deleting temp file");
+                        tempFile.delete();
+                    } else {
+                        if (tempFile.renameTo(savedFile)) {
+                            log.info("File renamed successfully: {}", savedFile.getAbsolutePath());
+                        } else {
+                            log.warn("Rename failed, keeping temp file: {}", tempFile.getAbsolutePath());
+                            savedFile = tempFile;
+                        }
+                    }
+                } catch (IOException e) {
+                    log.warn("Temp file approach failed, trying direct write: {}", e.getMessage());
+                    try (java.io.FileOutputStream fos = new java.io.FileOutputStream(savedFile)) {
+                        fos.write(bytes);
+                    }
+                }
+                log.info("File saved successfully, size: {} bytes", bytes.length);
+            }
+            
+            return savedFile.toPath();
         } catch (IOException e) {
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to save uploaded file", e);
+            log.error("Failed to save uploaded file", e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to save uploaded file: " + e.getMessage(), e);
         }
     }
 

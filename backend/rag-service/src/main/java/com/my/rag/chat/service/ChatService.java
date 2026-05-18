@@ -19,6 +19,8 @@ import com.my.rag.retrieval.service.RetrievalService;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -27,6 +29,7 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class ChatService {
 
+    private static final Logger log = LoggerFactory.getLogger(ChatService.class);
     private static final String NO_EVIDENCE_ANSWER = "当前资料中没有找到明确依据。";
 
     private final RagProperties ragProperties;

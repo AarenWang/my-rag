@@ -41,6 +41,7 @@ public class ChunkService {
     @Transactional
     public int createChunks(Long documentId, ParsedDocument parsedDocument, List<Chapter> chapters) {
         log.info("Creating chunks for documentId: {}, chapters: {}", documentId, chapters.size());
+        log.info("Parsed document has {} paragraphs", parsedDocument.paragraphs().size());
         deleteChunksByDocumentId(documentId);
 
         Set<String> existingHashes = new HashSet<>();
@@ -48,7 +49,8 @@ public class ChunkService {
         int totalCreated = 0;
 
         for (Chapter chapter : chapters) {
-            log.debug("Processing chapter: {}, paragraphs: {}", chapter.title(), chapter.contentParagraphs().size());
+            log.info("Processing chapter: '{}', start paragraph: {}, end paragraph: {}, paragraphs: {}", 
+                    chapter.title(), chapter.startParagraph(), chapter.endParagraph(), chapter.contentParagraphs().size());
             ChunkCreateResult result = createChapterChunks(
                     documentId,
                     chapter,
@@ -57,7 +59,7 @@ public class ChunkService {
             );
             chunkIndex = result.nextChunkIndex();
             totalCreated += result.createdCount();
-            log.debug("Chapter processed, created {} chunks", result.createdCount());
+            log.info("Chapter '{}' processed, created {} chunks", chapter.title(), result.createdCount());
         }
 
         log.info("Chunks created successfully for documentId: {}, total: {}", documentId, totalCreated);

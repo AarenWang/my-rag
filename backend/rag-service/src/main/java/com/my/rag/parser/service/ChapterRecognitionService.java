@@ -4,11 +4,14 @@ import com.my.rag.parser.dto.Chapter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 @Service
 public class ChapterRecognitionService {
 
+    private static final Logger log = LoggerFactory.getLogger(ChapterRecognitionService.class);
     private static final String DEFAULT_CHAPTER_TITLE = "正文";
 
     private static final List<Pattern> CHAPTER_PATTERNS = List.of(
@@ -21,9 +24,11 @@ public class ChapterRecognitionService {
     );
 
     public List<Chapter> recognizeChapters(List<String> paragraphs) {
+        log.info("Recognizing chapters from {} paragraphs", paragraphs != null ? paragraphs.size() : 0);
         List<Chapter> chapters = new ArrayList<>();
 
         if (paragraphs == null || paragraphs.isEmpty()) {
+            log.warn("No paragraphs to recognize chapters from");
             return chapters;
         }
 
@@ -35,6 +40,7 @@ public class ChapterRecognitionService {
             String matchedTitle = matchChapterTitle(paragraph);
 
             if (matchedTitle != null) {
+                log.info("Found chapter title at paragraph {}: '{}'", i, matchedTitle);
                 if (i > currentStart) {
                     chapters.add(createChapter(
                             currentTitle,
@@ -55,6 +61,14 @@ public class ChapterRecognitionService {
                     paragraphs.size() - 1,
                     paragraphs.subList(currentStart, paragraphs.size())
             ));
+        }
+
+        log.info("Chapter recognition completed, found {} chapters", chapters.size());
+        for (int i = 0; i < chapters.size(); i++) {
+            Chapter chapter = chapters.get(i);
+            log.info("  Chapter {}: '{}', paragraphs {}-{}, count: {}", 
+                    i, chapter.title(), chapter.startParagraph(), chapter.endParagraph(), 
+                    chapter.contentParagraphs().size());
         }
 
         return chapters;
