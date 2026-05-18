@@ -35,7 +35,7 @@ springdoc:
 rag:
   chunk:
     min-chars: 300
-    max-chars: 1000
+    max-chars: 4000
     overlap-chars: 150
   index:
     worker-threads: 1
@@ -55,8 +55,8 @@ rag:
     embedding-request-timeout-seconds: ${RAG_EMBEDDING_TIMEOUT_SECONDS:60}
     embedding-price-per-1k-tokens: ${RAG_EMBEDDING_PRICE_PER_1K_TOKENS:0.0005}
     chat-provider: ${RAG_CHAT_PROVIDER:mock}
-    chat-model: ${RAG_CHAT_MODEL:deepseek-chat}
-    chat-base-url: ${RAG_CHAT_BASE_URL:https://api.openai.com/v1}
+    chat-model: ${RAG_CHAT_MODEL:deepseek-v4-pro}
+    chat-base-url: ${RAG_CHAT_BASE_URL:https://api.deepseek.com}
     chat-api-key: ${RAG_CHAT_API_KEY:}
     chat-request-timeout-seconds: ${RAG_CHAT_TIMEOUT_SECONDS:60}
     chat-temperature: ${RAG_CHAT_TEMPERATURE:0.2}

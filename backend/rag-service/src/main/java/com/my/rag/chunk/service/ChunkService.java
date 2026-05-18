@@ -102,6 +102,39 @@ public class ChunkService {
 
             while (currentEndParagraph < paragraphs.size()) {
                 String nextParagraph = paragraphs.get(currentEndParagraph);
+                
+                if (nextParagraph.length() > maxChars) {
+                    if (currentLength >= minChars) {
+                        break;
+                    }
+                    if (currentParagraphs.isEmpty()) {
+                        int splitStart = 0;
+                        while (splitStart < nextParagraph.length()) {
+                            int splitEnd = Math.min(splitStart + maxChars, nextParagraph.length());
+                            String splitContent = nextParagraph.substring(splitStart, splitEnd);
+                            
+                            String contentHash = sha256Hex(splitContent);
+                            if (existingHashes.add(contentHash)) {
+                                RagDocumentChunk chunk = new RagDocumentChunk();
+                                chunk.setDocumentId(documentId);
+                                chunk.setChapterTitle(chapter.title());
+                                chunk.setChunkIndex(chunkIndex);
+                                chunk.setStartParagraph(chapter.startParagraph() + currentEndParagraph);
+                                chunk.setEndParagraph(chapter.startParagraph() + currentEndParagraph);
+                                chunk.setContent(splitContent);
+                                chunk.setContentHash(contentHash);
+                                chunk.setTokenCount(estimateTokenCount(splitContent));
+                                chunkMapper.insert(chunk);
+                                chunkIndex++;
+                                createdCount++;
+                            }
+                            splitStart = splitEnd;
+                        }
+                        currentEndParagraph++;
+                    }
+                    break;
+                }
+
                 int addLength = (currentLength > 0 ? 2 : 0) + nextParagraph.length();
 
                 if (currentLength + addLength > maxChars) {

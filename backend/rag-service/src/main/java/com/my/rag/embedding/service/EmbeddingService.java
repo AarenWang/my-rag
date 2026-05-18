@@ -90,9 +90,19 @@ public class EmbeddingService {
         embeddingMapper.deleteByDocumentId(documentId);
     }
 
+    private static final int MAX_EMBEDDING_LENGTH_CHARS = 8000;
+
     private EmbeddingRequest toRequest(String model, List<RagDocumentChunk> chunks) {
         List<EmbeddingInput> inputs = chunks.stream()
-                .map(chunk -> new EmbeddingInput(chunk.getId(), chunk.getContent()))
+                .map(chunk -> {
+                    String content = chunk.getContent();
+                    if (content != null && content.length() > MAX_EMBEDDING_LENGTH_CHARS) {
+                        log.warn("Chunk content exceeds max length, truncating, chunkId: {}, originalLength: {}",
+                                chunk.getId(), content.length());
+                        content = content.substring(0, MAX_EMBEDDING_LENGTH_CHARS);
+                    }
+                    return new EmbeddingInput(chunk.getId(), content);
+                })
                 .toList();
         return new EmbeddingRequest(model, inputs);
     }
