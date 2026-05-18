@@ -2,6 +2,7 @@ package com.my.rag.embedding.service;
 
 import com.my.rag.chunk.entity.RagDocumentChunk;
 import com.my.rag.chunk.service.ChunkService;
+import com.my.rag.chat.service.ApiLogService;
 import com.my.rag.config.RagProperties;
 import com.my.rag.embedding.client.EmbeddingClient;
 import com.my.rag.embedding.client.EmbeddingClientException;
@@ -30,16 +31,19 @@ public class EmbeddingService {
     private final EmbeddingClient embeddingClient;
     private final RagChunkEmbeddingMapper embeddingMapper;
     private final RagProperties ragProperties;
+    private final ApiLogService apiLogService;
 
     public EmbeddingService(
             ChunkService chunkService,
             EmbeddingClient embeddingClient,
             RagChunkEmbeddingMapper embeddingMapper,
-            RagProperties ragProperties) {
+            RagProperties ragProperties,
+            ApiLogService apiLogService) {
         this.chunkService = chunkService;
         this.embeddingClient = embeddingClient;
         this.embeddingMapper = embeddingMapper;
         this.ragProperties = ragProperties;
+        this.apiLogService = apiLogService;
     }
 
     @Transactional
@@ -54,32 +58,48 @@ public class EmbeddingService {
             throw new EmbeddingClientException("Embedding model must not be empty");
         }
 
-        int batchSize = Math.max(1, ragProperties.getModel().getEmbeddingBatchSize());
         int expectedDimension = ragProperties.getModel().getEmbeddingDimension();
         int savedCount = 0;
-        log.info("Generating embeddings, documentId: {}, chunks: {}, batchSize: {}, model: {}",
-                documentId, chunks.size(), batchSize, model);
+        log.info("Generating embeddings, documentId: {}, chunks: {}, model: {}",
+                documentId, chunks.size(), model);
 
         embeddingMapper.deleteByDocumentId(documentId);
 
-        for (int start = 0; start < chunks.size(); start += batchSize) {
-            List<RagDocumentChunk> batch = chunks.subList(start, Math.min(start + batchSize, chunks.size()));
-            EmbeddingResponse response = embeddingClient.embed(toRequest(model, batch));
-            validateResponse(response, batch, expectedDimension);
-            Map<Long, EmbeddingVector> vectorsByChunkId = toVectorMap(response.vectors());
-            for (RagDocumentChunk chunk : batch) {
-                EmbeddingVector vector = vectorsByChunkId.get(chunk.getId());
-                if (vector == null) {
-                    throw new EmbeddingClientException("Embedding response missing chunkId: " + chunk.getId());
-                }
+        for (RagDocumentChunk chunk : chunks) {
+            long startedAt = System.nanoTime();
+            EmbeddingInput input = toInput(chunk);
+            EmbeddingResponse response = null;
+            Exception error = null;
+
+            try {
+                response = embeddingClient.embed(new EmbeddingRequest(model, List.of(input)));
+                validateResponse(response, List.of(chunk), expectedDimension);
+                
+                EmbeddingVector vector = response.vectors().get(0);
                 RagChunkEmbedding embedding = new RagChunkEmbedding();
                 embedding.setChunkId(chunk.getId());
                 embedding.setEmbedding(toPgVector(vector.vector()));
                 embedding.setEmbeddingModel(model);
                 embeddingMapper.upsertEmbedding(embedding);
                 savedCount++;
+                
+                if (savedCount % 10 == 0 || savedCount == chunks.size()) {
+                    log.info("Embedding progress, documentId: {}, saved: {}/{}", documentId, savedCount, chunks.size());
+                }
+            } catch (Exception e) {
+                error = e;
+                throw e;
+            } finally {
+                long latency = elapsedMillis(startedAt);
+                apiLogService.logEmbeddingApiCall(
+                        documentId,
+                        chunk.getId(),
+                        model,
+                        input,
+                        response,
+                        error,
+                        latency);
             }
-            log.info("Embedding batch saved, documentId: {}, saved: {}/{}", documentId, savedCount, chunks.size());
         }
 
         log.info("Embeddings generated successfully, documentId: {}, total: {}", documentId, savedCount);
@@ -92,19 +112,14 @@ public class EmbeddingService {
 
     private static final int MAX_EMBEDDING_LENGTH_CHARS = 8000;
 
-    private EmbeddingRequest toRequest(String model, List<RagDocumentChunk> chunks) {
-        List<EmbeddingInput> inputs = chunks.stream()
-                .map(chunk -> {
-                    String content = chunk.getContent();
-                    if (content != null && content.length() > MAX_EMBEDDING_LENGTH_CHARS) {
-                        log.warn("Chunk content exceeds max length, truncating, chunkId: {}, originalLength: {}",
-                                chunk.getId(), content.length());
-                        content = content.substring(0, MAX_EMBEDDING_LENGTH_CHARS);
-                    }
-                    return new EmbeddingInput(chunk.getId(), content);
-                })
-                .toList();
-        return new EmbeddingRequest(model, inputs);
+    private EmbeddingInput toInput(RagDocumentChunk chunk) {
+        String content = chunk.getContent();
+        if (content != null && content.length() > MAX_EMBEDDING_LENGTH_CHARS) {
+            log.warn("Chunk content exceeds max length, truncating, chunkId: {}, originalLength: {}",
+                    chunk.getId(), content.length());
+            content = content.substring(0, MAX_EMBEDDING_LENGTH_CHARS);
+        }
+        return new EmbeddingInput(chunk.getId(), content);
     }
 
     private void validateResponse(EmbeddingResponse response, List<RagDocumentChunk> batch, int expectedDimension) {
@@ -138,16 +153,6 @@ public class EmbeddingService {
         }
     }
 
-    private Map<Long, EmbeddingVector> toVectorMap(List<EmbeddingVector> vectors) {
-        Map<Long, EmbeddingVector> result = new HashMap<>();
-        for (EmbeddingVector vector : vectors) {
-            if (result.put(vector.chunkId(), vector) != null) {
-                throw new EmbeddingClientException("Embedding response contains duplicate chunkId: " + vector.chunkId());
-            }
-        }
-        return result;
-    }
-
     private String toPgVector(List<Double> vector) {
         StringBuilder builder = new StringBuilder(vector.size() * 10);
         builder.append('[');
@@ -159,5 +164,9 @@ public class EmbeddingService {
         }
         builder.append(']');
         return builder.toString();
+    }
+
+    private long elapsedMillis(long startedAt) {
+        return (System.nanoTime() - startedAt) / 1_000_000L;
     }
 }

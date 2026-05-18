@@ -8,6 +8,7 @@ import com.my.rag.chat.dto.LlmChatResponse;
 import com.my.rag.chat.dto.LlmMessage;
 import com.my.rag.chat.entity.RagChatLog;
 import com.my.rag.chat.repository.RagChatLogMapper;
+import com.my.rag.chat.service.ApiLogService;
 import com.my.rag.config.RagProperties;
 import com.my.rag.retrieval.dto.RetrievalQuery;
 import com.my.rag.retrieval.dto.RetrievalResult;
@@ -30,16 +31,19 @@ public class ChatService {
     private final RetrievalService retrievalService;
     private final LlmClient llmClient;
     private final RagChatLogMapper chatLogMapper;
+    private final ApiLogService apiLogService;
 
     public ChatService(
             RagProperties ragProperties,
             RetrievalService retrievalService,
             LlmClient llmClient,
-            RagChatLogMapper chatLogMapper) {
+            RagChatLogMapper chatLogMapper,
+            ApiLogService apiLogService) {
         this.ragProperties = ragProperties;
         this.retrievalService = retrievalService;
         this.llmClient = llmClient;
         this.chatLogMapper = chatLogMapper;
+        this.apiLogService = apiLogService;
     }
 
     public ChatResponse chat(ChatRequest request) {
@@ -50,6 +54,11 @@ public class ChatService {
         long startedAt = System.nanoTime();
         ChatResponse response = null;
         List<RetrievedChunk> retrievedChunks = List.of();
+
+        RagChatLog chatLog = new RagChatLog();
+        chatLog.setQuestion(request.question());
+        
+        Long chatLogId = null;
         try {
             int retrievalTopK = resolveTopK(request.topK());
             double scoreThreshold = resolveScoreThreshold(request.scoreThreshold());
@@ -63,18 +72,65 @@ public class ChatService {
 
             if (retrievalResult.noEvidence()) {
                 response = new ChatResponse(NO_EVIDENCE_ANSWER, true, List.of());
+                chatLog.setAnswer(response.answer());
+                chatLog.setDocumentIds(joinIds(request.documentIds()));
+                chatLog.setRetrievedChunkIds("");
+                chatLog.setTopK(resolveTopK(request.topK()));
+                chatLog.setLatencyMs(elapsedMillis(startedAt));
+                chatLogMapper.insert(chatLog);
                 return response;
             }
 
             List<RetrievedChunk> contexts = selectContexts(retrievedChunks);
-            LlmChatResponse llmResponse = llmClient.chat(new LlmChatRequest(
-                    ragProperties.getModel().getChatModel(),
+            String model = ragProperties.getModel().getChatModel();
+            LlmChatRequest llmRequest = new LlmChatRequest(
+                    model,
                     buildMessages(request.question(), contexts),
-                    ragProperties.getModel().getChatTemperature()));
+                    ragProperties.getModel().getChatTemperature());
+
+            long llmStartedAt = System.nanoTime();
+            LlmChatResponse llmResponse = null;
+            Exception llmError = null;
+            try {
+                llmResponse = llmClient.chat(llmRequest);
+            } catch (Exception e) {
+                llmError = e;
+                throw e;
+            } finally {
+                long llmLatency = elapsedMillis(llmStartedAt);
+                apiLogService.logLlmApiCall(
+                        chatLogId,
+                        model,
+                        llmRequest,
+                        llmResponse,
+                        llmError,
+                        llmLatency);
+            }
+
             response = new ChatResponse(withSourceReminder(llmResponse.content(), contexts), false, toSources(contexts));
+            
+            chatLog.setAnswer(response.answer());
+            chatLog.setDocumentIds(joinIds(request.documentIds()));
+            chatLog.setRetrievedChunkIds(retrievedChunks.stream()
+                    .map(RetrievedChunk::chunkId)
+                    .filter(Objects::nonNull)
+                    .map(String::valueOf)
+                    .collect(Collectors.joining(",")));
+            chatLog.setTopK(resolveTopK(request.topK()));
+            chatLog.setMinScore(retrievedChunks.stream()
+                    .map(RetrievedChunk::score)
+                    .filter(Objects::nonNull)
+                    .min(Double::compareTo)
+                    .orElse(null));
+            chatLog.setLatencyMs(elapsedMillis(startedAt));
+            chatLogMapper.insert(chatLog);
+            chatLogId = chatLog.getId();
+            
             return response;
         } finally {
-            recordChatLog(request, response, retrievedChunks, elapsedMillis(startedAt));
+            if (chatLogId == null && chatLog.getAnswer() != null) {
+                chatLogMapper.insert(chatLog);
+            }
         }
     }
 
@@ -147,30 +203,6 @@ public class ChatService {
         return requestedScoreThreshold != null
                 ? requestedScoreThreshold
                 : ragProperties.getRetrieval().getScoreThreshold();
-    }
-
-    private void recordChatLog(
-            ChatRequest request,
-            ChatResponse response,
-            List<RetrievedChunk> retrievedChunks,
-            long latencyMs) {
-        RagChatLog log = new RagChatLog();
-        log.setQuestion(request.question());
-        log.setAnswer(response == null ? null : response.answer());
-        log.setDocumentIds(joinIds(request.documentIds()));
-        log.setRetrievedChunkIds(retrievedChunks.stream()
-                .map(RetrievedChunk::chunkId)
-                .filter(Objects::nonNull)
-                .map(String::valueOf)
-                .collect(Collectors.joining(",")));
-        log.setTopK(resolveTopK(request.topK()));
-        log.setMinScore(retrievedChunks.stream()
-                .map(RetrievedChunk::score)
-                .filter(Objects::nonNull)
-                .min(Double::compareTo)
-                .orElse(null));
-        log.setLatencyMs(latencyMs);
-        chatLogMapper.insert(log);
     }
 
     private String joinIds(List<Long> ids) {
