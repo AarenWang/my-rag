@@ -30,6 +30,7 @@ export default function Chat() {
       response?: ChatResponse;
     }>
   >([]);
+  const [isTyping, setIsTyping] = useState(false);
 
   const { data: documentsData, isLoading: documentsLoading } = useQuery({
     queryKey: ["documents"],
@@ -41,6 +42,9 @@ export default function Chat() {
 
   const chatMutation = useMutation({
     mutationFn: (payload: ChatRequest) => chat(payload),
+    onMutate: () => {
+      setIsTyping(true);
+    },
     onSuccess: (result) => {
       setMessages((prev) => [
         ...prev,
@@ -59,6 +63,9 @@ export default function Chat() {
           content: `抱歉，出错了：${error.message}`,
         },
       ]);
+    },
+    onSettled: () => {
+      setIsTyping(false);
     },
   });
 
@@ -175,6 +182,14 @@ export default function Chat() {
             response={msg.response}
           />
         ))}
+        {isTyping && (
+          <ChatMessage
+            key="loading"
+            role="assistant"
+            content=""
+            isLoading={true}
+          />
+        )}
       </Card>
     </section>
   );

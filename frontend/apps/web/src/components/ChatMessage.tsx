@@ -1,18 +1,22 @@
 import type { ChatResponse } from "@my-rag/types";
-import { Alert, Card, Typography } from "antd";
-import { CheckCircle, AlertCircle, Bot, User } from "lucide-react";
+import { Alert, Card, Typography, Spin } from "antd";
+import { CheckCircle, AlertCircle, Bot, User, Loader2 } from "lucide-react";
 import SourceList from "./SourceList";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface ChatMessageProps {
   role: "user" | "assistant";
   content: string;
   response?: ChatResponse;
+  isLoading?: boolean;
 }
 
 export default function ChatMessage({
   role,
   content,
   response,
+  isLoading = false,
 }: ChatMessageProps) {
   const isUser = role === "user";
 
@@ -31,14 +35,27 @@ export default function ChatMessage({
           flexShrink: 0,
         }}
       >
-        {isUser ? <User size={20} /> : <Bot size={20} />}
+        {isLoading ? (
+          <Loader2 size={20} className="animate-spin" />
+        ) : isUser ? (
+          <User size={20} />
+        ) : (
+          <Bot size={20} />
+        )}
       </div>
       <div style={{ flex: 1 }}>
         <Typography.Text strong style={{ display: "block", marginBottom: 8 }}>
           {isUser ? "用户" : "AI 助手"}
         </Typography.Text>
 
-        {!isUser && response?.noAnswer ? (
+        {isLoading ? (
+          <Card size="small">
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <Spin indicator={<Loader2 size={20} className="animate-spin" />} />
+              <Typography.Text>正在思考中...</Typography.Text>
+            </div>
+          </Card>
+        ) : !isUser && response?.noAnswer ? (
           <Alert
             message="当前资料中没有找到明确依据"
             description="请尝试换一种问法，或检查文档是否已成功索引。"
@@ -48,13 +65,19 @@ export default function ChatMessage({
           />
         ) : (
           <Card size="small">
-            <Typography.Paragraph style={{ marginBottom: 0, whiteSpace: "pre-wrap" }}>
-              {content}
-            </Typography.Paragraph>
+            <div className="prose prose-slate">
+              {isUser ? (
+                <Typography.Paragraph style={{ marginBottom: 0, whiteSpace: "pre-wrap" }}>
+                  {content}
+                </Typography.Paragraph>
+              ) : (
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+              )}
+            </div>
           </Card>
         )}
 
-        {!isUser && response && !response.noAnswer && (
+        {!isUser && !isLoading && response && !response.noAnswer && (
           <SourceList sources={response.sources} />
         )}
       </div>
