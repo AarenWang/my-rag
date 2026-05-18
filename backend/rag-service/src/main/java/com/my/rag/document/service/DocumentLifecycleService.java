@@ -49,13 +49,12 @@ public class DocumentLifecycleService {
         Map<DocumentStatus, Set<DocumentStatus>> transitions = new EnumMap<>(DocumentStatus.class);
         transitions.put(DocumentStatus.UPLOADED, EnumSet.of(DocumentStatus.PARSING, DocumentStatus.FAILED));
         transitions.put(DocumentStatus.PARSING, EnumSet.of(DocumentStatus.PARSED, DocumentStatus.FAILED));
-        transitions.put(DocumentStatus.PARSED, EnumSet.of(DocumentStatus.CHUNKING, DocumentStatus.FAILED));
+        transitions.put(DocumentStatus.PARSED, EnumSet.of(DocumentStatus.PARSING, DocumentStatus.CHUNKING, DocumentStatus.FAILED));
         transitions.put(DocumentStatus.CHUNKING, EnumSet.of(DocumentStatus.CHUNKED, DocumentStatus.FAILED));
-        transitions.put(DocumentStatus.CHUNKED, EnumSet.of(DocumentStatus.EMBEDDING, DocumentStatus.FAILED));
+        transitions.put(DocumentStatus.CHUNKED, EnumSet.of(DocumentStatus.PARSING, DocumentStatus.CHUNKING, DocumentStatus.EMBEDDING, DocumentStatus.FAILED));
         transitions.put(DocumentStatus.EMBEDDING, EnumSet.of(DocumentStatus.READY, DocumentStatus.FAILED));
-        transitions.put(DocumentStatus.READY, EnumSet.of(DocumentStatus.CHUNKING, DocumentStatus.EMBEDDING, DocumentStatus.FAILED));
+        transitions.put(DocumentStatus.READY, EnumSet.of(DocumentStatus.PARSING, DocumentStatus.CHUNKING, DocumentStatus.EMBEDDING, DocumentStatus.FAILED));
         transitions.put(DocumentStatus.FAILED, EnumSet.of(DocumentStatus.PARSING, DocumentStatus.CHUNKING, DocumentStatus.EMBEDDING));
         return transitions;
     }
 }
-

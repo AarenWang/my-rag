@@ -37,6 +37,10 @@ rag:
     min-chars: 300
     max-chars: 1000
     overlap-chars: 150
+  index:
+    worker-threads: 1
+    queue-capacity: 20
+    tika-max-extract-chars: 5000000
   retrieval:
     default-top-k: 20
     context-top-k: 8

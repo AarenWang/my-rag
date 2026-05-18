@@ -6,12 +6,17 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 public class RagProperties {
 
     private final Chunk chunk = new Chunk();
+    private final Index index = new Index();
     private final Retrieval retrieval = new Retrieval();
     private final Model model = new Model();
     private final Storage storage = new Storage();
 
     public Chunk getChunk() {
         return chunk;
+    }
+
+    public Index getIndex() {
+        return index;
     }
 
     public Retrieval getRetrieval() {
@@ -53,6 +58,36 @@ public class RagProperties {
 
         public void setOverlapChars(int overlapChars) {
             this.overlapChars = overlapChars;
+        }
+    }
+
+    public static class Index {
+        private int workerThreads = 1;
+        private int queueCapacity = 20;
+        private int tikaMaxExtractChars = 5_000_000;
+
+        public int getWorkerThreads() {
+            return workerThreads;
+        }
+
+        public void setWorkerThreads(int workerThreads) {
+            this.workerThreads = workerThreads;
+        }
+
+        public int getQueueCapacity() {
+            return queueCapacity;
+        }
+
+        public void setQueueCapacity(int queueCapacity) {
+            this.queueCapacity = queueCapacity;
+        }
+
+        public int getTikaMaxExtractChars() {
+            return tikaMaxExtractChars;
+        }
+
+        public void setTikaMaxExtractChars(int tikaMaxExtractChars) {
+            this.tikaMaxExtractChars = tikaMaxExtractChars;
         }
     }
 
