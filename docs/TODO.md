@@ -8,7 +8,14 @@
 上传电子书 -> 文本解析 -> 章节识别 -> Chunk 切分 -> Embedding -> pgvector 入库 -> 检索 -> LLM 回答 -> 来源引用
 ```
 
-MVP 优先支持 `TXT`、`Markdown`、`EPUB`，暂不做复杂 Agent、复杂 PDF 版式还原、企业权限、多租户、审计日志和完整前端后台。
+MVP 优先支持 `TXT`、`Markdown`、`EPUB`。暂不做复杂 Agent、复杂 PDF 版式还原、企业权限、多租户、审计日志、独立 Chat Logs 页面，以及独立 `docs/api.md` / `docs/database.md` 文档。
+
+## 本次范围调整
+
+- [x] 独立 `Chat Logs` 页面不作为 MVP 必需功能。
+- [x] `docs/api.md` 不作为 MVP 必需文档，接口说明统一放在根目录 `README.md`。
+- [x] `docs/database.md` 不作为 MVP 必需文档，数据库和配置说明统一放在根目录 `README.md`。
+- [x] 保留后端 chat log 能力，用于调试和 Dashboard 最近问答展示。
 
 ## 已完成
 
@@ -19,21 +26,23 @@ MVP 优先支持 `TXT`、`Markdown`、`EPUB`，暂不做复杂 Agent、复杂 PD
 - [x] 初始化后端 Maven 多模块：`backend/rag-common`、`backend/rag-api`、`backend/rag-service`
 - [x] 初始化 Spring Boot 可启动应用 `RagApplication`
 - [x] 接入基础配置：`application.yml`、`application-local.yml`
+- [x] 拆分本地安全配置和机密配置：`application-local.yml` / `application-local-secret.yml`
 - [x] 接入 Flyway 迁移目录和基础表结构
-- [x] 新增基础占位接口：`/api/rag/health`、`/api/rag/documents`、`/api/rag/documents/{id}/status`、`/api/rag/chat`
-- [x] 定义 RAG 主链路关键实体、DTO 和文档状态机校验逻辑
-- [x] 验证后端 Maven 构建通过：`mvn clean package -DskipTests`
-- [x] 在禁用 Flyway 的情况下验证 health 接口可用
+- [x] 新增基础接口：`/api/rag/health`、`/api/rag/documents`、`/api/rag/documents/{id}/status`、`/api/rag/chat`
+- [x] 定义 RAG 主链路关键实体、DTO 和文档状态机
+- [x] 验证后端 Maven 构建通过
+- [x] 验证前端 Web 构建通过
+- [x] 更新根目录 `README.md`
 
 ## P0 后端主链路
 
 ### 1. 本地基础设施
 
-- [x] 准备外部 PostgreSQL 服务并确认已安装 pgvector 扩展
+- [x] 准备 PostgreSQL + pgvector 服务
 - [x] 配置本地 Spring Boot 数据库连接
 - [x] 验证 Flyway 可成功执行 `V1__init_pgvector.sql`
 - [x] 验证 Flyway 可成功创建 `rag_document`、`rag_document_chunk`、`rag_chunk_embedding`、`rag_chat_log`
-- [x] 补充外部数据库连接和启动说明到根目录 `README.md`
+- [x] 补充数据库连接、机密配置和启动说明到根目录 `README.md`
 
 ### 2. 文档领域模型
 
@@ -60,8 +69,8 @@ MVP 优先支持 `TXT`、`Markdown`、`EPUB`，暂不做复杂 Agent、复杂 PD
 - [x] 设计 `DocumentParser` 策略接口
 - [x] 实现 `TxtDocumentParser`
 - [x] 实现 `MarkdownDocumentParser`
-- [x] 初步实现 `EpubDocumentParser`，可优先基于 Tika
-- [x] 保留 `PdfDocumentParser` 扩展点，复杂 PDF 放到后续阶段
+- [x] 初步实现 `EpubDocumentParser`，基于 Tika
+- [x] 保留 PDF 扩展点，复杂 PDF 放到后续阶段
 - [x] 实现基础文本清洗：空行、页眉页脚噪声、重复段落、目录噪声
 - [x] 文本解析为空时将文档状态置为 `FAILED`
 
@@ -86,69 +95,76 @@ MVP 优先支持 `TXT`、`Markdown`、`EPUB`，暂不做复杂 Agent、复杂 PD
 ### 7. 文档 Index 流程
 
 - [x] 实现触发处理接口：`POST /api/rag/documents/{id}/index`
-- [x] 串联解析、章节识别、chunk 切分（embedding 入库待后续实现）
+- [x] Index 流程只负责 parse + chapter recognition + chunk
 - [x] 实现文档状态流转：`UPLOADED -> PARSING -> PARSED -> CHUNKING -> CHUNKED`
 - [x] 任意步骤失败时状态置为 `FAILED` 并记录 `errorMessage`
-- [x] MVP 可以先同步执行，后续再改异步任务
-
-### 日志配置
-
-- [x] 添加 logback-spring.xml 日志配置
-- [x] 给所有 Controller 入口方法添加日志
-- [x] 给 Service 关键方法添加日志
+- [x] MVP 先同步执行，后续再评估是否改异步任务
 
 ### 8. Embedding
 
 - [x] 设计 `EmbeddingClient` 接口
 - [x] 设计 embedding 请求/响应 DTO
 - [x] 支持通过配置选择 embedding 模型
-- [x] 实现云端 embedding 调用，优先兼容 OpenAI 风格接口
+- [x] 实现云端 embedding 调用，兼容 OpenAI 风格接口
 - [x] 新增 `RagChunkEmbedding` entity
 - [x] 新增 `RagChunkEmbeddingMapper`
 - [x] 批量生成 chunk 向量
 - [x] 将向量写入 `rag_chunk_embedding`
 - [x] 处理 embedding 失败、限流、空向量、维度不匹配等异常
+- [x] 新增 embedding 费用预估接口：`GET /api/rag/documents/{id}/embedding/estimate`
+- [x] 新增独立 embedding 执行接口：`POST /api/rag/documents/{id}/embedding`
+- [x] 支持配置 `RAG_EMBEDDING_PRICE_PER_1K_TOKENS`
+- [x] 文档成功 embedding 后状态流转到 `READY`
 
 ### 9. 检索
 
-- [ ] 新增 `RetrievalService`
-- [ ] 实现问题向量化
-- [ ] 实现 pgvector topK 检索 SQL
-- [ ] 支持按 `documentIds` 过滤
-- [ ] 支持 `scoreThreshold` 过滤
-- [ ] 返回 chunk 内容、metadata、score
-- [ ] 当有效召回为空时返回无依据结果
+- [x] 新增 `RetrievalService`
+- [x] 实现问题向量化
+- [x] 实现 pgvector topK 检索 SQL
+- [x] 支持按 `documentIds` 过滤
+- [x] 支持 `scoreThreshold` 过滤
+- [x] 返回 chunk 内容、metadata、score
+- [x] 当有效召回为空时返回无依据结果
 
 ### 10. Chat 问答
 
-- [ ] 设计 `ChatClient` 或 `LlmClient` 接口
+- [x] 设计 `LlmClient` 接口
 - [x] 设计 chat / LLM client 请求响应 DTO
-- [ ] 实现 LLM 调用，优先兼容 OpenAI 风格接口
-- [ ] 实现 Prompt 模板组装
-- [ ] 实现上下文片段格式化：`source_n`、书名、章节、chunkId、内容
-- [ ] 实现 `POST /api/rag/chat`
-- [ ] 返回 `answer`、`noAnswer`、`sources`
-- [ ] 回答中必须包含来源引用
-- [ ] 召回不足时直接返回“当前资料中没有找到明确依据。”
-- [ ] 多个片段观点不一致时提示差异
+- [x] 实现 LLM 调用，兼容 OpenAI 风格接口
+- [x] 实现 Prompt 模板组装
+- [x] 实现上下文片段格式化：`source_n`、书名、章节、chunkId、内容
+- [x] 实现 `POST /api/rag/chat`
+- [x] 返回 `answer`、`noAnswer`、`sources`
+- [x] 回答中追加或要求包含来源引用
+- [x] 召回不足时直接返回“当前资料中没有找到明确依据。”
+- [x] Prompt 要求多个片段观点不一致时提示差异
 
 ### 11. 问答日志
 
 - [x] 新增 `RagChatLog` entity
-- [ ] 新增 `RagChatLogMapper`
-- [ ] 记录 question、answer、documentIds、retrievedChunkIds、topK、minScore、latencyMs
-- [ ] LLM 调用失败时记录错误日志
-- [ ] 后续为 Dashboard 提供最近问答数据
+- [x] 新增 `RagChatLogMapper`
+- [x] 记录 question、answer、documentIds、retrievedChunkIds、topK、minScore、latencyMs
+- [x] 记录 LLM API 调用日志和失败信息
+- [x] 提供 `GET /api/rag/chat/logs`
+- [x] 提供 `GET /api/rag/chat/logs/{id}`
+- [ ] Dashboard 接入最近问答数据
 
 ### 12. 后端异常与响应规范
 
-- [ ] 新增全局异常处理 `GlobalExceptionHandler`
-- [ ] 统一参数校验错误响应
-- [ ] 统一业务异常模型
-- [ ] 文件格式不支持返回 400
-- [ ] 问题为空返回 400
-- [ ] 无 READY 文档时返回明确提示
-- [ ] LLM 或 embedding 服务异常时返回可理解错误
+- [x] 新增全局异常处理 `GlobalExceptionHandler`
+- [x] 统一参数校验错误响应
+- [x] 文件格式不支持返回 400
+- [x] 问题为空返回 400
+- [x] 无 READY 文档或无有效召回时返回明确提示
+- [x] LLM 或 embedding 服务异常时返回可理解错误
+- [ ] 视需要补充更明确的业务异常模型
+
+### 13. 日志配置
+
+- [x] 添加 `logback-spring.xml` 日志配置
+- [x] 给 Controller 入口方法添加日志
+- [x] 给 Service 关键方法添加日志
+- [x] 记录 embedding / LLM API 调用日志
 
 ## P1 前端可视化
 
@@ -169,72 +185,40 @@ MVP 优先支持 `TXT`、`Markdown`、`EPUB`，暂不做复杂 Agent、复杂 PD
 - [x] 接入 React Router
 - [x] 接入 TanStack Query
 - [x] 接入 Ant Design
-- [x] 可选接入 Tailwind CSS
 - [x] 配置 API base URL
 
 ### 3. 页面实现
 
-- [ ] 实现 `Dashboard` 页面，展示文档数量、READY 数量、失败数、最近问答
-- [x] 实现 `Documents` 页面，支持上传文档、查看文档列表、触发 index、查看状态
-- [ ] 实现 `DocumentDetail` 页面，展示文档 metadata 和 chunk 列表
-- [ ] 实现 `Chat` 页面，支持选择文档、输入问题、展示回答和引用来源
-- [ ] 实现 `Settings` 页面，展示 chunk、retrieval、model 配置
+- [x] 实现 `Dashboard` 页面基础统计：文档数量、READY 数量、失败数、处理中数量
+- [ ] `Dashboard` 页面接入最近问答
+- [x] 实现 `Documents` 页面：上传文档、查看文档列表、触发 index、查看状态
+- [x] 实现 `DocumentDetail` 页面：展示 metadata、chunk 列表、处理状态、embedding 费用确认
+- [x] 实现 `Chat` 页面：选择文档、输入问题、展示回答和引用来源
+- [x] 实现 `Settings` 页面：展示 chunk、retrieval、model 配置
+- [x] 调整 Chat 页面输入框位置：最新回答后继续提问
+- [x] 独立 `Chat Logs` 页面不作为 MVP 必需页面
 
 ### 4. 前端组件
 
-- [ ] 实现 `UploadPanel`
-- [x] 实现 `DocumentStatusBadge` (内嵌在 Documents 页面中)
-- [ ] 实现 `ChunkPreview`
-- [ ] 实现 `SourceList`
-- [ ] 实现 `ChatMessage`
-- [x] 实现基础错误提示和加载状态 (使用 Ant Design 组件)
+- [x] 上传能力已在 `Documents` 页面内实现，不再要求独立 `UploadPanel`
+- [x] 实现 `DocumentStatusBadge`
+- [x] 实现 `ChunkPreview`
+- [x] 实现 `SourceList`
+- [x] 实现 `ChatMessage`
+- [x] 实现基础错误提示和加载状态
 
 ### 5. 前端 API Client
 
 - [x] 封装 `GET /api/rag/documents`
 - [x] 封装 `POST /api/rag/documents/upload`
-- [x] 封装 `POST /api/rag/documents/{id}/index` (后端接口已实现)
+- [x] 封装 `POST /api/rag/documents/{id}/index`
 - [x] 封装 `GET /api/rag/documents/{id}/status`
-- [ ] 封装 `GET /api/rag/chunks?documentId=xxx` (后端接口已实现)
-- [ ] 封装 `POST /api/rag/chat` (后端接口待实现)
-
-## 页面功能规划
-
-### 1. 概览页面 (Dashboard)
-- 功能概览：
-  - 展示文档总数
-  - 展示 READY 状态文档数量
-  - 展示失败文档数量
-  - 展示最近问答记录
-
-### 2. 文档页面 (Documents)
-- 功能概览：
-  - 上传文档（支持 TXT、Markdown、EPUB）
-  - 查看文档列表（展示标题、文件名、类型、状态）
-  - 触发文档 Index（解析、切分、向量化）
-  - 查看文档处理状态
-  - 跳转到文档详情页
-
-### 3. 文档详情页面 (DocumentDetail)
-- 功能概览：
-  - 展示文档基本信息（metadata）
-  - 展示 Chunk 列表
-  - 预览 Chunk 内容
-  - 查看处理进度和错误信息（如有）
-
-### 4. 问答页面 (Chat)
-- 功能概览：
-  - 选择要查询的文档（支持多选）
-  - 输入问题
-  - 展示 LLM 回答
-  - 展示引用来源（来源文档、章节、Chunk）
-  - 支持多轮对话
-
-### 5. 设置页面 (Settings)
-- 功能概览：
-  - 配置 Chunk 参数（最小字符数、最大字符数、重叠字符数）
-  - 配置检索参数（TopK、相似度阈值）
-  - 配置模型参数（Embedding 模型、LLM 模型）
+- [x] 封装 `GET /api/rag/chunks?documentId=xxx`
+- [x] 封装 `GET /api/rag/documents/{id}/embedding/estimate`
+- [x] 封装 `POST /api/rag/documents/{id}/embedding`
+- [x] 封装 `POST /api/rag/chat`
+- [x] 封装 `GET /api/rag/chat/logs`
+- [x] 封装 `GET /api/rag/chat/logs/{id}`
 
 ## P2 测试、验收与演示
 
@@ -248,6 +232,7 @@ MVP 优先支持 `TXT`、`Markdown`、`EPUB`，暂不做复杂 Agent、复杂 PD
 ### 2. 后端测试
 
 - [ ] 为文件 hash 去重补单元测试
+- [x] 为文本清洗补单元测试
 - [ ] 为文本解析补单元测试
 - [ ] 为章节识别补单元测试
 - [ ] 为 chunk 切分补单元测试
@@ -256,6 +241,8 @@ MVP 优先支持 `TXT`、`Markdown`、`EPUB`，暂不做复杂 Agent、复杂 PD
 
 ### 3. 集成验证
 
+- [x] 验证后端 `mvn -pl rag-service -am test-compile` 通过
+- [x] 验证前端 `pnpm --filter @my-rag/web build` 通过
 - [ ] 验证文档可以从 `UPLOADED` 流转到 `READY`
 - [ ] 验证至少 1 本中文电子书可完成完整入库
 - [ ] 验证至少 10 个测试问题中 7 个以上能召回合理片段
@@ -265,10 +252,12 @@ MVP 优先支持 `TXT`、`Markdown`、`EPUB`，暂不做复杂 Agent、复杂 PD
 
 ### 4. 文档补充
 
-- [ ] 新增根目录 `README.md`
-- [ ] 新增 `docs/api.md`
-- [ ] 新增 `docs/database.md`
-- [ ] 补充本地启动步骤
+- [x] 更新根目录 `README.md`
+- [x] 补充本地启动步骤
+- [x] 补充配置和机密文件说明
+- [x] 补充主要 API 列表到根目录 `README.md`
+- [x] 独立 `docs/api.md` 不需要
+- [x] 独立 `docs/database.md` 不需要
 - [ ] 补充常见问题：Docker 未安装、数据库连接失败、模型 API 配置缺失
 
 ## P3 后续增强
