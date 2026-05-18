@@ -93,9 +93,29 @@ public class RagProperties {
     }
 
     public static class Retrieval {
+        private String mode = "vector";
         private int defaultTopK = 20;
+        private int vectorTopK = 20;
+        private int keywordTopK = 20;
+        private int rrfTopK = 30;
+        private int rerankTopK = 8;
         private int contextTopK = 8;
         private double scoreThreshold = 0.35;
+        private int rrfK = 60;
+        private String textSearchConfig = "jiebacfg";
+        private boolean keywordIndexEnabled = false;
+        private String keywordQueryMode = "websearch";
+        private int keywordMaxQueries = 3;
+        private String rerankerProvider = "noop";
+        private int maxContextChars = 8000;
+
+        public String getMode() {
+            return mode;
+        }
+
+        public void setMode(String mode) {
+            this.mode = mode;
+        }
 
         public int getDefaultTopK() {
             return defaultTopK;
@@ -103,6 +123,38 @@ public class RagProperties {
 
         public void setDefaultTopK(int defaultTopK) {
             this.defaultTopK = defaultTopK;
+        }
+
+        public int getVectorTopK() {
+            return vectorTopK;
+        }
+
+        public void setVectorTopK(int vectorTopK) {
+            this.vectorTopK = vectorTopK;
+        }
+
+        public int getKeywordTopK() {
+            return keywordTopK;
+        }
+
+        public void setKeywordTopK(int keywordTopK) {
+            this.keywordTopK = keywordTopK;
+        }
+
+        public int getRrfTopK() {
+            return rrfTopK;
+        }
+
+        public void setRrfTopK(int rrfTopK) {
+            this.rrfTopK = rrfTopK;
+        }
+
+        public int getRerankTopK() {
+            return rerankTopK;
+        }
+
+        public void setRerankTopK(int rerankTopK) {
+            this.rerankTopK = rerankTopK;
         }
 
         public int getContextTopK() {
@@ -119,6 +171,62 @@ public class RagProperties {
 
         public void setScoreThreshold(double scoreThreshold) {
             this.scoreThreshold = scoreThreshold;
+        }
+
+        public int getRrfK() {
+            return rrfK;
+        }
+
+        public void setRrfK(int rrfK) {
+            this.rrfK = rrfK;
+        }
+
+        public String getTextSearchConfig() {
+            return textSearchConfig;
+        }
+
+        public void setTextSearchConfig(String textSearchConfig) {
+            this.textSearchConfig = textSearchConfig;
+        }
+
+        public boolean isKeywordIndexEnabled() {
+            return keywordIndexEnabled;
+        }
+
+        public void setKeywordIndexEnabled(boolean keywordIndexEnabled) {
+            this.keywordIndexEnabled = keywordIndexEnabled;
+        }
+
+        public String getKeywordQueryMode() {
+            return keywordQueryMode;
+        }
+
+        public void setKeywordQueryMode(String keywordQueryMode) {
+            this.keywordQueryMode = keywordQueryMode;
+        }
+
+        public int getKeywordMaxQueries() {
+            return keywordMaxQueries;
+        }
+
+        public void setKeywordMaxQueries(int keywordMaxQueries) {
+            this.keywordMaxQueries = keywordMaxQueries;
+        }
+
+        public String getRerankerProvider() {
+            return rerankerProvider;
+        }
+
+        public void setRerankerProvider(String rerankerProvider) {
+            this.rerankerProvider = rerankerProvider;
+        }
+
+        public int getMaxContextChars() {
+            return maxContextChars;
+        }
+
+        public void setMaxContextChars(int maxContextChars) {
+            this.maxContextChars = maxContextChars;
         }
     }
 

@@ -7,6 +7,8 @@ import com.my.rag.config.RagProperties;
 import com.my.rag.embedding.repository.RagChunkEmbeddingMapper;
 import com.my.rag.parser.dto.Chapter;
 import com.my.rag.parser.dto.ParsedDocument;
+import com.my.rag.retrieval.entity.RagChunkSearchIndex;
+import com.my.rag.retrieval.repository.RagChunkSearchIndexMapper;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -27,14 +29,17 @@ public class ChunkService {
 
     private final RagDocumentChunkMapper chunkMapper;
     private final RagChunkEmbeddingMapper embeddingMapper;
+    private final RagChunkSearchIndexMapper searchIndexMapper;
     private final RagProperties ragProperties;
 
     public ChunkService(
             RagDocumentChunkMapper chunkMapper,
             RagChunkEmbeddingMapper embeddingMapper,
+            RagChunkSearchIndexMapper searchIndexMapper,
             RagProperties ragProperties) {
         this.chunkMapper = chunkMapper;
         this.embeddingMapper = embeddingMapper;
+        this.searchIndexMapper = searchIndexMapper;
         this.ragProperties = ragProperties;
     }
 
@@ -76,6 +81,7 @@ public class ChunkService {
 
     private void deleteChunksByDocumentId(Long documentId) {
         embeddingMapper.deleteByDocumentId(documentId);
+        searchIndexMapper.deleteByDocumentId(documentId);
         chunkMapper.delete(
                 new LambdaQueryWrapper<RagDocumentChunk>()
                         .eq(RagDocumentChunk::getDocumentId, documentId)
@@ -126,7 +132,7 @@ public class ChunkService {
                                 chunk.setContent(splitContent);
                                 chunk.setContentHash(contentHash);
                                 chunk.setTokenCount(estimateTokenCount(splitContent));
-                                chunkMapper.insert(chunk);
+                                insertChunk(chunk);
                                 chunkIndex++;
                                 createdCount++;
                             }
@@ -170,7 +176,7 @@ public class ChunkService {
                     chunk.setContent(content);
                     chunk.setContentHash(contentHash);
                     chunk.setTokenCount(estimateTokenCount(content));
-                    chunkMapper.insert(chunk);
+                    insertChunk(chunk);
                     chunkIndex++;
                     createdCount++;
                 }
@@ -187,6 +193,26 @@ public class ChunkService {
         }
 
         return new ChunkCreateResult(chunkIndex, createdCount);
+    }
+
+    private void insertChunk(RagDocumentChunk chunk) {
+        chunkMapper.insert(chunk);
+        if (!ragProperties.getRetrieval().isKeywordIndexEnabled()) {
+            return;
+        }
+
+        RagChunkSearchIndex searchIndex = new RagChunkSearchIndex();
+        searchIndex.setChunkId(chunk.getId());
+        searchIndex.setDocumentId(chunk.getDocumentId());
+        searchIndex.setSearchText(buildSearchText(chunk));
+        searchIndex.setTextSearchConfig(ragProperties.getRetrieval().getTextSearchConfig());
+        searchIndexMapper.upsertSearchIndex(searchIndex);
+    }
+
+    private String buildSearchText(RagDocumentChunk chunk) {
+        String chapterTitle = chunk.getChapterTitle() == null ? "" : chunk.getChapterTitle();
+        String content = chunk.getContent() == null ? "" : chunk.getContent();
+        return chapterTitle + "\n" + content;
     }
 
     private int findOverlapStart(List<String> paragraphs, int currentEnd, int overlapChars) {

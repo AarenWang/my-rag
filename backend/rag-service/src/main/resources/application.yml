@@ -42,9 +42,21 @@ rag:
     queue-capacity: 20
     tika-max-extract-chars: 5000000
   retrieval:
+    mode: ${RAG_RETRIEVAL_MODE:vector}
     default-top-k: 20
+    vector-top-k: ${RAG_RETRIEVAL_VECTOR_TOP_K:20}
+    keyword-top-k: ${RAG_RETRIEVAL_KEYWORD_TOP_K:20}
+    rrf-top-k: ${RAG_RETRIEVAL_RRF_TOP_K:30}
+    rerank-top-k: ${RAG_RETRIEVAL_RERANK_TOP_K:8}
     context-top-k: 8
     score-threshold: 0.35
+    rrf-k: ${RAG_RETRIEVAL_RRF_K:60}
+    text-search-config: ${RAG_TEXT_SEARCH_CONFIG:jiebacfg}
+    keyword-index-enabled: ${RAG_KEYWORD_INDEX_ENABLED:false}
+    keyword-query-mode: ${RAG_KEYWORD_QUERY_MODE:websearch}
+    keyword-max-queries: ${RAG_KEYWORD_MAX_QUERIES:3}
+    reranker-provider: ${RAG_RERANKER_PROVIDER:noop}
+    max-context-chars: ${RAG_MAX_CONTEXT_CHARS:8000}
   model:
     embedding-provider: ${RAG_EMBEDDING_PROVIDER:mock}
     embedding-model: ${RAG_EMBEDDING_MODEL:text-embedding-v4}

@@ -8,6 +8,8 @@ import com.my.rag.chat.client.LlmClient;
 import com.my.rag.chat.dto.LlmChatRequest;
 import com.my.rag.chat.dto.LlmChatResponse;
 import com.my.rag.chat.dto.LlmMessage;
+import com.my.rag.chat.dto.Evidence;
+import com.my.rag.chat.dto.EvidencePack;
 import com.my.rag.chat.entity.RagChatLog;
 import com.my.rag.chat.repository.RagChatLogMapper;
 import com.my.rag.chat.service.ApiLogService;
@@ -37,18 +39,21 @@ public class ChatService {
     private final LlmClient llmClient;
     private final RagChatLogMapper chatLogMapper;
     private final ApiLogService apiLogService;
+    private final ContextBuilder contextBuilder;
 
     public ChatService(
             RagProperties ragProperties,
             RetrievalService retrievalService,
             LlmClient llmClient,
             RagChatLogMapper chatLogMapper,
-            ApiLogService apiLogService) {
+            ApiLogService apiLogService,
+            ContextBuilder contextBuilder) {
         this.ragProperties = ragProperties;
         this.retrievalService = retrievalService;
         this.llmClient = llmClient;
         this.chatLogMapper = chatLogMapper;
         this.apiLogService = apiLogService;
+        this.contextBuilder = contextBuilder;
     }
 
     public ChatResponse chat(ChatRequest request) {
@@ -87,11 +92,22 @@ public class ChatService {
                 return response;
             }
 
-            List<RetrievedChunk> contexts = selectContexts(retrievedChunks);
+            EvidencePack evidencePack = contextBuilder.build(request.question(), retrievedChunks);
+            if (evidencePack.evidences().isEmpty()) {
+                response = new ChatResponse(NO_EVIDENCE_ANSWER, true, List.of());
+                chatLog.setAnswer(response.answer());
+                chatLog.setDocumentIds(joinIds(request.documentIds()));
+                chatLog.setRetrievedChunkIds("");
+                chatLog.setTopK(resolveTopK(request.topK()));
+                chatLog.setLatencyMs(elapsedMillis(startedAt));
+                chatLogMapper.updateById(chatLog);
+                return response;
+            }
+
             String model = ragProperties.getModel().getChatModel();
             LlmChatRequest llmRequest = new LlmChatRequest(
                     model,
-                    buildMessages(request.question(), contexts),
+                    buildMessages(evidencePack),
                     ragProperties.getModel().getChatTemperature());
 
             long llmStartedAt = System.nanoTime();
@@ -113,18 +129,20 @@ public class ChatService {
                         llmLatency);
             }
 
-            response = new ChatResponse(withSourceReminder(llmResponse.content(), contexts), false, toSources(contexts));
+            response = new ChatResponse(withSourceReminder(llmResponse.content(), evidencePack), false, toSources(evidencePack));
             
             chatLog.setAnswer(response.answer());
             chatLog.setDocumentIds(joinIds(request.documentIds()));
-            chatLog.setRetrievedChunkIds(retrievedChunks.stream()
+            chatLog.setRetrievedChunkIds(evidencePack.evidences().stream()
+                    .map(Evidence::chunk)
                     .map(RetrievedChunk::chunkId)
                     .filter(Objects::nonNull)
                     .map(String::valueOf)
                     .collect(Collectors.joining(",")));
             chatLog.setTopK(resolveTopK(request.topK()));
-            chatLog.setMinScore(retrievedChunks.stream()
-                    .map(RetrievedChunk::score)
+            chatLog.setMinScore(evidencePack.evidences().stream()
+                    .map(Evidence::chunk)
+                    .map(RetrievedChunk::finalScore)
                     .filter(Objects::nonNull)
                     .min(Double::compareTo)
                     .orElse(null));
@@ -138,32 +156,21 @@ public class ChatService {
         }
     }
 
-    private List<LlmMessage> buildMessages(String question, List<RetrievedChunk> contexts) {
+    private List<LlmMessage> buildMessages(EvidencePack evidencePack) {
         return List.of(
                 LlmMessage.system("""
                         你是一个中文电子书知识库问答助手。请只根据用户提供的资料片段回答问题。
                         如果片段中没有足够依据，必须回答“当前资料中没有找到明确依据。”。
-                        不要编造资料中没有出现的信息。回答后列出引用来源，格式包含 source 编号、书名、章节和 chunkId。
+                        不要编造资料中没有出现的信息。回答后列出引用来源，格式为 [source_1]、[source_2]。
                         如果多个片段观点不一致，请说明差异。
+                        不要输出与问题无关的泛泛解释。
                         """),
-                LlmMessage.user("用户问题：\n" + question + "\n\n检索片段：\n" + formatContexts(contexts)));
+                LlmMessage.user("用户问题：\n" + evidencePack.question()
+                        + "\n\n资料：\n" + contextBuilder.toPromptContext(evidencePack)
+                        + "\n请给出回答："));
     }
 
-    private String formatContexts(List<RetrievedChunk> contexts) {
-        StringBuilder builder = new StringBuilder();
-        for (int i = 0; i < contexts.size(); i++) {
-            RetrievedChunk chunk = contexts.get(i);
-            builder.append("[source_").append(i + 1).append("]\n");
-            builder.append("书名：").append(nullToDash(chunk.documentTitle())).append('\n');
-            builder.append("章节：").append(nullToDash(chunk.chapterTitle())).append('\n');
-            builder.append("chunkId：").append(chunk.chunkId()).append('\n');
-            builder.append("score：").append(chunk.score()).append('\n');
-            builder.append("内容：").append(chunk.content()).append("\n\n");
-        }
-        return builder.toString();
-    }
-
-    private String withSourceReminder(String answer, List<RetrievedChunk> contexts) {
+    private String withSourceReminder(String answer, EvidencePack evidencePack) {
         if (answer == null) {
             return NO_EVIDENCE_ANSWER;
         }
@@ -171,29 +178,25 @@ public class ChatService {
             return answer;
         }
 
-        String refs = contexts.stream()
-                .map(chunk -> "source_" + (contexts.indexOf(chunk) + 1)
-                        + ": " + nullToDash(chunk.documentTitle())
-                        + " / " + nullToDash(chunk.chapterTitle())
-                        + " / chunkId " + chunk.chunkId())
+        String refs = evidencePack.evidences().stream()
+                .map(evidence -> evidence.sourceId()
+                        + ": " + nullToDash(evidence.chunk().documentTitle())
+                        + " / " + nullToDash(evidence.chunk().chapterTitle())
+                        + " / chunkId " + evidence.chunk().chunkId())
                 .collect(Collectors.joining("\n"));
         return answer + "\n\n引用来源：\n" + refs;
     }
 
-    private List<RetrievedChunk> selectContexts(List<RetrievedChunk> chunks) {
-        int contextTopK = Math.max(1, ragProperties.getRetrieval().getContextTopK());
-        return chunks.stream().limit(contextTopK).toList();
-    }
-
-    private List<ChatResponse.Source> toSources(List<RetrievedChunk> chunks) {
-        return chunks.stream()
+    private List<ChatResponse.Source> toSources(EvidencePack evidencePack) {
+        return evidencePack.evidences().stream()
+                .map(Evidence::chunk)
                 .map(chunk -> new ChatResponse.Source(
                         chunk.documentId(),
                         chunk.documentTitle(),
                         chunk.chapterTitle(),
                         chunk.chunkId(),
                         chunk.chunkIndex(),
-                        chunk.score()))
+                        chunk.finalScore()))
                 .toList();
     }
 

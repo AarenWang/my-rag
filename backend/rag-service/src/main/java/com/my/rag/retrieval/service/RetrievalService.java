@@ -10,6 +10,7 @@ import com.my.rag.embedding.dto.EmbeddingVector;
 import com.my.rag.retrieval.dto.RetrievalQuery;
 import com.my.rag.retrieval.dto.RetrievalResult;
 import com.my.rag.retrieval.dto.RetrievedChunk;
+import com.my.rag.retrieval.rerank.RerankerClient;
 import com.my.rag.retrieval.repository.RetrievalMapper;
 import java.util.List;
 import java.util.Locale;
@@ -26,14 +27,23 @@ public class RetrievalService {
     private final RagProperties ragProperties;
     private final EmbeddingClient embeddingClient;
     private final RetrievalMapper retrievalMapper;
+    private final KeywordRetrievalService keywordRetrievalService;
+    private final HybridRanker hybridRanker;
+    private final RerankerClient rerankerClient;
 
     public RetrievalService(
             RagProperties ragProperties,
             EmbeddingClient embeddingClient,
-            RetrievalMapper retrievalMapper) {
+            RetrievalMapper retrievalMapper,
+            KeywordRetrievalService keywordRetrievalService,
+            HybridRanker hybridRanker,
+            RerankerClient rerankerClient) {
         this.ragProperties = ragProperties;
         this.embeddingClient = embeddingClient;
         this.retrievalMapper = retrievalMapper;
+        this.keywordRetrievalService = keywordRetrievalService;
+        this.hybridRanker = hybridRanker;
+        this.rerankerClient = rerankerClient;
     }
 
     public RetrievalResult retrieve(RetrievalQuery query) {
@@ -47,17 +57,36 @@ public class RetrievalService {
         }
 
         int topK = resolveTopK(query.topK());
+        int vectorTopK = resolveVectorTopK(query.topK());
+        int keywordTopK = resolveKeywordTopK(query.topK());
+        int rrfTopK = resolveRrfTopK(topK);
+        int rerankTopK = resolveRerankTopK(topK);
         double scoreThreshold = resolveScoreThreshold(query.scoreThreshold());
+        List<Long> documentIds = normalizeDocumentIds(query.documentIds());
         List<Double> questionEmbedding = query.questionEmbedding() == null || query.questionEmbedding().isEmpty()
                 ? embedQuestion(model, query.question())
                 : query.questionEmbedding();
 
-        List<RetrievedChunk> chunks = retrievalMapper.search(
+        List<RetrievedChunk> vectorChunks = retrievalMapper.search(
                 toPgVector(questionEmbedding),
                 model,
-                normalizeDocumentIds(query.documentIds()),
-                topK,
+                documentIds,
+                vectorTopK,
                 scoreThreshold);
+        List<RetrievedChunk> chunks = isHybridMode()
+                ? rerankerClient.rerank(
+                                query.question(),
+                                hybridRanker.mergeByRrf(
+                                        vectorChunks,
+                                        keywordRetrievalService.search(query.question(), documentIds, keywordTopK),
+                                        ragProperties.getRetrieval().getRrfK(),
+                                        rrfTopK),
+                                rerankTopK)
+                        .stream()
+                        .map(candidate -> candidate.toRetrievedChunk())
+                        .limit(topK)
+                        .toList()
+                : asVectorOnlyChunks(vectorChunks, topK);
 
         return new RetrievalResult(query.question(), chunks.isEmpty(), chunks);
     }
@@ -88,8 +117,38 @@ public class RetrievalService {
         return requestedTopK > 0 ? requestedTopK : defaultTopK;
     }
 
+    private int resolveVectorTopK(int requestedTopK) {
+        if (requestedTopK > 0) {
+            return requestedTopK;
+        }
+        int vectorTopK = ragProperties.getRetrieval().getVectorTopK();
+        return vectorTopK > 0 ? vectorTopK : resolveTopK(requestedTopK);
+    }
+
+    private int resolveKeywordTopK(int requestedTopK) {
+        if (requestedTopK > 0) {
+            return requestedTopK;
+        }
+        int keywordTopK = ragProperties.getRetrieval().getKeywordTopK();
+        return keywordTopK > 0 ? keywordTopK : resolveTopK(requestedTopK);
+    }
+
+    private int resolveRrfTopK(int fallbackTopK) {
+        int rrfTopK = ragProperties.getRetrieval().getRrfTopK();
+        return rrfTopK > 0 ? rrfTopK : fallbackTopK;
+    }
+
+    private int resolveRerankTopK(int fallbackTopK) {
+        int rerankTopK = ragProperties.getRetrieval().getRerankTopK();
+        return rerankTopK > 0 ? rerankTopK : fallbackTopK;
+    }
+
     private double resolveScoreThreshold(double requestedScoreThreshold) {
         return requestedScoreThreshold;
+    }
+
+    private boolean isHybridMode() {
+        return "hybrid".equalsIgnoreCase(ragProperties.getRetrieval().getMode());
     }
 
     private List<Long> normalizeDocumentIds(List<Long> documentIds) {
@@ -117,5 +176,34 @@ public class RetrievalService {
         }
         builder.append(']');
         return builder.toString();
+    }
+
+    private List<RetrievedChunk> asVectorOnlyChunks(List<RetrievedChunk> chunks, int topK) {
+        java.util.ArrayList<RetrievedChunk> decorated = new java.util.ArrayList<>();
+        for (int i = 0; i < chunks.size() && decorated.size() < topK; i++) {
+            decorated.add(asVectorOnlyChunk(chunks.get(i), i + 1));
+        }
+        return List.copyOf(decorated);
+    }
+
+    private RetrievedChunk asVectorOnlyChunk(RetrievedChunk chunk, int rank) {
+        return new RetrievedChunk(
+                chunk.documentId(),
+                chunk.documentTitle(),
+                chunk.chapterTitle(),
+                chunk.chunkId(),
+                chunk.chunkIndex(),
+                chunk.startParagraph(),
+                chunk.endParagraph(),
+                chunk.content(),
+                chunk.score(),
+                chunk.score(),
+                null,
+                null,
+                null,
+                chunk.score(),
+                rank,
+                null,
+                List.of("vector"));
     }
 }

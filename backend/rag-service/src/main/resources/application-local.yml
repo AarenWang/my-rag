@@ -7,6 +7,13 @@ spring:
 rag:
   storage:
     upload-dir: ${RAG_UPLOAD_DIR:uploads/documents}
+  retrieval:
+    mode: ${RAG_RETRIEVAL_MODE:vector}
+    keyword-index-enabled: ${RAG_KEYWORD_INDEX_ENABLED:false}
+    text-search-config: ${RAG_TEXT_SEARCH_CONFIG:jiebacfg}
+    keyword-query-mode: ${RAG_KEYWORD_QUERY_MODE:websearch}
+    keyword-max-queries: ${RAG_KEYWORD_MAX_QUERIES:3}
+    reranker-provider: ${RAG_RERANKER_PROVIDER:noop}
   model:
     embedding-provider: ${RAG_EMBEDDING_PROVIDER:mock}
     embedding-api-key: ${RAG_EMBEDDING_API_KEY:}
