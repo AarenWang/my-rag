@@ -12,3 +12,12 @@ export interface DocumentStatus {
   errorMessage?: string | null;
 }
 
+export interface DocumentUploadResponse {
+  documentId: number;
+  title: string;
+  fileName: string;
+  fileType: string;
+  status: string;
+  duplicate: boolean;
+}
+

@@ -1,4 +1,4 @@
-import type { DocumentStatus, DocumentSummary } from "@my-rag/types";
+import type { DocumentStatus, DocumentSummary, DocumentUploadResponse } from "@my-rag/types";
 import { request } from "./client";
 
 export function getDocuments() {
@@ -7,5 +7,21 @@ export function getDocuments() {
 
 export function getDocumentStatus(documentId: number) {
   return request<DocumentStatus>(`/api/rag/documents/${documentId}/status`);
+}
+
+export function uploadDocument(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return request<DocumentUploadResponse>("/api/rag/documents/upload", {
+    method: "POST",
+    body: formData,
+    skipJsonBody: true
+  });
+}
+
+export function triggerDocumentIndex(documentId: number) {
+  return request<void>(`/api/rag/documents/${documentId}/index`, {
+    method: "POST"
+  });
 }
 

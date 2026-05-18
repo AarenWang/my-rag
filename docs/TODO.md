@@ -21,6 +21,7 @@ MVP 优先支持 `TXT`、`Markdown`、`EPUB`，暂不做复杂 Agent、复杂 PD
 - [x] 接入基础配置：`application.yml`、`application-local.yml`
 - [x] 接入 Flyway 迁移目录和基础表结构
 - [x] 新增基础占位接口：`/api/rag/health`、`/api/rag/documents`、`/api/rag/documents/{id}/status`、`/api/rag/chat`
+- [x] 定义 RAG 主链路关键实体、DTO 和文档状态机校验逻辑
 - [x] 验证后端 Maven 构建通过：`mvn clean package -DskipTests`
 - [x] 在禁用 Flyway 的情况下验证 health 接口可用
 
@@ -46,13 +47,13 @@ MVP 优先支持 `TXT`、`Markdown`、`EPUB`，暂不做复杂 Agent、复杂 PD
 
 ### 3. 文件上传与去重
 
-- [ ] 实现上传接口：`POST /api/rag/documents/upload`
-- [ ] 支持 `TXT`、`Markdown`、`EPUB` 文件类型校验
-- [ ] 计算文件 SHA-256 hash
-- [ ] 重复上传同一文件时返回已有 `documentId`
-- [ ] 将原始文件保存到本地 `uploads/` 目录
-- [ ] 保存文件名、类型、大小、hash、source path、初始状态
-- [ ] 处理文件为空、格式不支持、保存失败等异常场景
+- [x] 实现上传接口：`POST /api/rag/documents/upload`
+- [x] 支持 `TXT`、`Markdown`、`EPUB` 文件类型校验
+- [x] 计算文件 SHA-256 hash
+- [x] 重复上传同一文件时返回已有 `documentId`
+- [x] 将原始文件保存到本地 `uploads/` 目录
+- [x] 保存文件名、类型、大小、hash、source path、初始状态
+- [x] 处理文件为空、格式不支持、保存失败等异常场景
 
 ### 4. 文本解析
 
@@ -73,7 +74,7 @@ MVP 优先支持 `TXT`、`Markdown`、`EPUB`，暂不做复杂 Agent、复杂 PD
 
 ### 6. Chunk 切分
 
-- [ ] 新增 `RagDocumentChunk` entity
+- [x] 新增 `RagDocumentChunk` entity
 - [ ] 新增 `RagDocumentChunkMapper`
 - [ ] 新增 `ChunkService`
 - [ ] 按章节和自然段合并生成 chunk
@@ -93,10 +94,10 @@ MVP 优先支持 `TXT`、`Markdown`、`EPUB`，暂不做复杂 Agent、复杂 PD
 ### 8. Embedding
 
 - [ ] 设计 `EmbeddingClient` 接口
-- [ ] 设计 embedding 请求/响应 DTO
+- [x] 设计 embedding 请求/响应 DTO
 - [ ] 支持通过配置选择 embedding 模型
 - [ ] 实现云端 embedding 调用，优先兼容 OpenAI 风格接口
-- [ ] 新增 `RagChunkEmbedding` entity
+- [x] 新增 `RagChunkEmbedding` entity
 - [ ] 新增 `RagChunkEmbeddingMapper`
 - [ ] 批量生成 chunk 向量
 - [ ] 将向量写入 `rag_chunk_embedding`
@@ -115,6 +116,7 @@ MVP 优先支持 `TXT`、`Markdown`、`EPUB`，暂不做复杂 Agent、复杂 PD
 ### 10. Chat 问答
 
 - [ ] 设计 `ChatClient` 或 `LlmClient` 接口
+- [x] 设计 chat / LLM client 请求响应 DTO
 - [ ] 实现 LLM 调用，优先兼容 OpenAI 风格接口
 - [ ] 实现 Prompt 模板组装
 - [ ] 实现上下文片段格式化：`source_n`、书名、章节、chunkId、内容
@@ -126,7 +128,7 @@ MVP 优先支持 `TXT`、`Markdown`、`EPUB`，暂不做复杂 Agent、复杂 PD
 
 ### 11. 问答日志
 
-- [ ] 新增 `RagChatLog` entity
+- [x] 新增 `RagChatLog` entity
 - [ ] 新增 `RagChatLogMapper`
 - [ ] 记录 question、answer、documentIds、retrievedChunkIds、topK、minScore、latencyMs
 - [ ] LLM 调用失败时记录错误日志
@@ -185,10 +187,48 @@ MVP 优先支持 `TXT`、`Markdown`、`EPUB`，暂不做复杂 Agent、复杂 PD
 
 - [ ] 封装 `GET /api/rag/documents`
 - [ ] 封装 `POST /api/rag/documents/upload`
-- [ ] 封装 `POST /api/rag/documents/{id}/index`
+- [ ] 封装 `POST /api/rag/documents/{id}/index` (后端接口待实现)
 - [ ] 封装 `GET /api/rag/documents/{id}/status`
-- [ ] 封装 `GET /api/rag/chunks?documentId=xxx`
-- [ ] 封装 `POST /api/rag/chat`
+- [ ] 封装 `GET /api/rag/chunks?documentId=xxx` (后端接口待实现)
+- [ ] 封装 `POST /api/rag/chat` (后端接口待实现)
+
+## 页面功能规划
+
+### 1. 概览页面 (Dashboard)
+- 功能概览：
+  - 展示文档总数
+  - 展示 READY 状态文档数量
+  - 展示失败文档数量
+  - 展示最近问答记录
+
+### 2. 文档页面 (Documents)
+- 功能概览：
+  - 上传文档（支持 TXT、Markdown、EPUB）
+  - 查看文档列表（展示标题、文件名、类型、状态）
+  - 触发文档 Index（解析、切分、向量化）
+  - 查看文档处理状态
+  - 跳转到文档详情页
+
+### 3. 文档详情页面 (DocumentDetail)
+- 功能概览：
+  - 展示文档基本信息（metadata）
+  - 展示 Chunk 列表
+  - 预览 Chunk 内容
+  - 查看处理进度和错误信息（如有）
+
+### 4. 问答页面 (Chat)
+- 功能概览：
+  - 选择要查询的文档（支持多选）
+  - 输入问题
+  - 展示 LLM 回答
+  - 展示引用来源（来源文档、章节、Chunk）
+  - 支持多轮对话
+
+### 5. 设置页面 (Settings)
+- 功能概览：
+  - 配置 Chunk 参数（最小字符数、最大字符数、重叠字符数）
+  - 配置检索参数（TopK、相似度阈值）
+  - 配置模型参数（Embedding 模型、LLM 模型）
 
 ## P2 测试、验收与演示
 
