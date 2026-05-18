@@ -1,5 +1,7 @@
 package com.my.rag.chat.service;
 
+import com.my.rag.api.chat.dto.ChatLogDetailResponse;
+import com.my.rag.api.chat.dto.ChatLogSummaryResponse;
 import com.my.rag.api.chat.dto.ChatRequest;
 import com.my.rag.api.chat.dto.ChatResponse;
 import com.my.rag.chat.client.LlmClient;
@@ -221,5 +223,53 @@ public class ChatService {
 
     private String nullToDash(String value) {
         return StringUtils.hasText(value) ? value : "-";
+    }
+
+    public List<ChatLogSummaryResponse> listChatLogs() {
+        log.info("Listing chat logs");
+        List<RagChatLog> logs = chatLogMapper.selectList(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<RagChatLog>()
+                        .orderByDesc(RagChatLog::getCreatedAt)
+        );
+        return logs.stream()
+                .map(log -> new ChatLogSummaryResponse(
+                        log.getId(),
+                        log.getQuestion(),
+                        log.getAnswer() == null ? "" : truncateAnswer(log.getAnswer(), 100),
+                        log.getCreatedAt()))
+                .toList();
+    }
+
+    public ChatLogDetailResponse getChatLogDetail(Long id) {
+        log.info("Getting chat log detail, id: {}", id);
+        RagChatLog log = chatLogMapper.selectById(id);
+        if (log == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Chat log not found: " + id);
+        }
+        List<String> chunkIds = parseIds(log.getRetrievedChunkIds());
+        return new ChatLogDetailResponse(
+                log.getId(),
+                log.getQuestion(),
+                log.getAnswer(),
+                log.getDocumentIds(),
+                chunkIds,
+                log.getTopK(),
+                log.getMinScore(),
+                log.getLatencyMs(),
+                log.getCreatedAt());
+    }
+
+    private String truncateAnswer(String answer, int maxLength) {
+        if (answer == null || answer.length() <= maxLength) {
+            return answer;
+        }
+        return answer.substring(0, maxLength) + "...";
+    }
+
+    private List<String> parseIds(String idsStr) {
+        if (idsStr == null || idsStr.isBlank()) {
+            return List.of();
+        }
+        return List.of(idsStr.split(","));
     }
 }
