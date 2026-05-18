@@ -1,0 +1,23 @@
+import { Navigate, Route, Routes } from "react-router-dom";
+import MainLayout from "./layouts/MainLayout";
+import Chat from "./pages/Chat";
+import Dashboard from "./pages/Dashboard";
+import DocumentDetail from "./pages/DocumentDetail";
+import Documents from "./pages/Documents";
+import Settings from "./pages/Settings";
+
+export default function App() {
+  return (
+    <Routes>
+      <Route element={<MainLayout />}>
+        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/documents" element={<Documents />} />
+        <Route path="/documents/:documentId" element={<DocumentDetail />} />
+        <Route path="/chat" element={<Chat />} />
+        <Route path="/settings" element={<Settings />} />
+      </Route>
+    </Routes>
+  );
+}
+

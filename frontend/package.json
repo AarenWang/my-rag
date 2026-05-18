@@ -1,0 +1,17 @@
+{
+  "name": "my-rag-frontend",
+  "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:web": "pnpm --filter @my-rag/web dev",
+    "build": "turbo run build",
+    "build:web": "pnpm --filter @my-rag/web build",
+    "lint": "turbo run lint",
+    "clean": "turbo run clean && pnpm store prune"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0"
+  }
+}
+
