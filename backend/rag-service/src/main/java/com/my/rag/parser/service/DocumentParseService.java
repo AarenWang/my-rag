@@ -1,5 +1,6 @@
 package com.my.rag.parser.service;
 
+import com.my.rag.collection.service.CollectionService;
 import com.my.rag.document.entity.RagDocument;
 import com.my.rag.document.enums.DocumentStatus;
 import com.my.rag.document.repository.RagDocumentMapper;
@@ -16,18 +17,21 @@ import org.springframework.util.StringUtils;
 public class DocumentParseService {
 
     private static final Logger log = LoggerFactory.getLogger(DocumentParseService.class);
-    
+
     private final List<DocumentParser> parsers;
     private final DocumentLifecycleService lifecycleService;
     private final RagDocumentMapper documentMapper;
+    private final CollectionService collectionService;
 
     public DocumentParseService(
             List<DocumentParser> parsers,
             DocumentLifecycleService lifecycleService,
-            RagDocumentMapper documentMapper) {
+            RagDocumentMapper documentMapper,
+            CollectionService collectionService) {
         this.parsers = parsers;
         this.lifecycleService = lifecycleService;
         this.documentMapper = documentMapper;
+        this.collectionService = collectionService;
     }
 
     public ParsedDocument parse(Long documentId) {
@@ -37,10 +41,10 @@ public class DocumentParseService {
         }
 
         try {
-            log.info("Starting to parse documentId: {}, title: {}, fileType: {}", 
+            log.info("Starting to parse documentId: {}, title: {}, fileType: {}",
                     documentId, document.getTitle(), document.getFileType());
             lifecycleService.moveTo(document, DocumentStatus.PARSING);
-            documentMapper.updateById(document);
+            updateDocumentAndCollectionCounts(document);
 
             ParsedDocument parsedDocument = selectParser(document).parse(document);
             log.info("Parsing completed for documentId: {}, paragraphs: {}", 
@@ -48,27 +52,39 @@ public class DocumentParseService {
             
             if (parsedDocument.isBlank()) {
                 lifecycleService.fail(document, "Parsed text is empty");
-                documentMapper.updateById(document);
+                updateDocumentAndCollectionCounts(document);
                 throw new IllegalStateException("Parsed text is empty: " + documentId);
             }
 
             if (!parsedDocument.paragraphs().isEmpty()) {
-                log.info("First paragraph (preview): {}", 
-                        parsedDocument.paragraphs().get(0).length() > 200 
-                            ? parsedDocument.paragraphs().get(0).substring(0, 200) + "..." 
+                log.info("First paragraph (preview): {}",
+                        parsedDocument.paragraphs().get(0).length() > 200
+                            ? parsedDocument.paragraphs().get(0).substring(0, 200) + "..."
                             : parsedDocument.paragraphs().get(0));
             }
 
             lifecycleService.moveTo(document, DocumentStatus.PARSED);
-            documentMapper.updateById(document);
+            updateDocumentAndCollectionCounts(document);
             return parsedDocument;
         } catch (RuntimeException e) {
             log.error("Parsing failed for documentId: {}", documentId, e);
             if (document.getStatus() != DocumentStatus.FAILED) {
                 lifecycleService.fail(document, e.getMessage());
-                documentMapper.updateById(document);
+                updateDocumentAndCollectionCounts(document);
             }
             throw e;
+        }
+    }
+
+    private void updateDocumentAndCollectionCounts(RagDocument document) {
+        documentMapper.updateById(document);
+        if (document.getCollectionId() != null) {
+            try {
+                collectionService.updateCollectionCounts(document.getCollectionId());
+            } catch (Exception e) {
+                log.warn("Failed to update collection counts for collectionId: {}",
+                    document.getCollectionId(), e);
+            }
         }
     }
 

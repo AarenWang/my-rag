@@ -1,6 +1,7 @@
 export interface RetrievalDebugRequest {
   question: string;
   documentIds?: number[];
+  collectionIds?: number[];
   topK?: number;
   scoreThreshold?: number;
 }

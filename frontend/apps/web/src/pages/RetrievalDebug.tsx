@@ -1,4 +1,4 @@
-import { debugRetrieval, getDocuments } from "@my-rag/api";
+import { debugRetrieval, getCollections, getDocuments } from "@my-rag/api";
 import type { RetrievalDebugCandidate, RetrievalDebugRequest, RetrievalDebugResponse } from "@my-rag/types";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import type { ColumnsType } from "antd/es/table";
@@ -11,6 +11,7 @@ import {
   Input,
   InputNumber,
   List,
+  Select,
   Space,
   Spin,
   Table,
@@ -187,6 +188,7 @@ function EvidenceList({ result }: { result: RetrievalDebugResponse }) {
 
 export default function RetrievalDebug() {
   const [question, setQuestion] = useState("");
+  const [selectedCollectionIds, setSelectedCollectionIds] = useState<number[]>([]);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<number[]>([]);
   const [topK, setTopK] = useState<number | null>(null);
   const [scoreThreshold, setScoreThreshold] = useState<number | null>(null);
@@ -196,10 +198,17 @@ export default function RetrievalDebug() {
     queryFn: getDocuments
   });
 
+  const { data: collectionsData } = useQuery({
+    queryKey: ["collections"],
+    queryFn: () => getCollections(false)
+  });
+
   const readyDocuments = useMemo(
     () => (documentsData?.data ?? []).filter((document) => document.status === "READY"),
     [documentsData]
   );
+
+  const collections = collectionsData?.data ?? [];
 
   const debugMutation = useMutation({
     mutationFn: (payload: RetrievalDebugRequest) => debugRetrieval(payload),
@@ -222,6 +231,7 @@ export default function RetrievalDebug() {
     }
     debugMutation.mutate({
       question: trimmedQuestion,
+      collectionIds: selectedCollectionIds.length > 0 ? selectedCollectionIds : undefined,
       documentIds: selectedDocumentIds.length > 0 ? selectedDocumentIds : undefined,
       topK: topK && topK > 0 ? topK : undefined,
       scoreThreshold: scoreThreshold ?? undefined
@@ -275,6 +285,32 @@ export default function RetrievalDebug() {
           </Space>
         </Space>
       </Card>
+
+      {collections.length > 0 && (
+        <Card title="Collection scope (optional)" size="small">
+          <Space direction="vertical" style={{ width: "100%" }}>
+            <Text type="secondary">
+              Select collections to limit search scope. When collections are selected, document selection will be ignored.
+            </Text>
+            <Select
+              mode="multiple"
+              placeholder="Select collections to search within"
+              style={{ width: "100%" }}
+              value={selectedCollectionIds}
+              onChange={setSelectedCollectionIds}
+              options={collections.map((c) => ({
+                label: `${c.name} (${c.readyDocumentCount}/${c.documentCount} docs)`,
+                value: c.collectionId
+              }))}
+            />
+            {selectedCollectionIds.length > 0 && (
+              <Button size="small" onClick={() => setSelectedCollectionIds([])}>
+                Clear collection selection
+              </Button>
+            )}
+          </Space>
+        </Card>
+      )}
 
       <Card title="Document scope" size="small">
         {documentsLoading ? (

@@ -3,6 +3,7 @@ import MainLayout from "./layouts/MainLayout";
 import Chat from "./pages/Chat";
 import ChatLogs from "./pages/ChatLogs";
 import ChatLogDetail from "./pages/ChatLogDetail";
+import Collections from "./pages/Collections";
 import Dashboard from "./pages/Dashboard";
 import DocumentDetail from "./pages/DocumentDetail";
 import Documents from "./pages/Documents";
@@ -15,6 +16,7 @@ export default function App() {
       <Route element={<MainLayout />}>
         <Route index element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/collections" element={<Collections />} />
         <Route path="/documents" element={<Documents />} />
         <Route path="/documents/:documentId" element={<DocumentDetail />} />
         <Route path="/chat" element={<Chat />} />

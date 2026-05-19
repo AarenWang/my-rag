@@ -1,6 +1,7 @@
 package com.my.rag.document.service;
 
 import com.my.rag.chunk.service.ChunkService;
+import com.my.rag.collection.service.CollectionService;
 import com.my.rag.document.entity.RagDocument;
 import com.my.rag.document.enums.DocumentStatus;
 import com.my.rag.document.repository.RagDocumentMapper;
@@ -24,6 +25,7 @@ public class DocumentIndexService {
     private final ChapterRecognitionService chapterService;
     private final ChunkService chunkService;
     private final EmbeddingService embeddingService;
+    private final CollectionService collectionService;
 
     public DocumentIndexService(
             RagDocumentMapper documentMapper,
@@ -31,13 +33,15 @@ public class DocumentIndexService {
             DocumentParseService parseService,
             ChapterRecognitionService chapterService,
             ChunkService chunkService,
-            EmbeddingService embeddingService) {
+            EmbeddingService embeddingService,
+            CollectionService collectionService) {
         this.documentMapper = documentMapper;
         this.lifecycleService = lifecycleService;
         this.parseService = parseService;
         this.chapterService = chapterService;
         this.chunkService = chunkService;
         this.embeddingService = embeddingService;
+        this.collectionService = collectionService;
     }
 
     public void indexDocument(Long documentId, IndexProgressListener progressListener) {
@@ -66,14 +70,14 @@ public class DocumentIndexService {
             progressListener.update("CHUNKING", 60, "Creating chunks", null);
             log.info("Step 3/3: Creating chunks...");
             lifecycleService.moveTo(document, DocumentStatus.CHUNKING);
-            documentMapper.updateById(document);
+            updateDocumentAndCollectionCounts(document);
 
             int chunkCount = chunkService.createChunks(documentId, parsedDocument, chapters);
             log.info("Chunk creation completed, chunks: {}", chunkCount);
             progressListener.update("CHUNKED", 95, "Chunks created: " + chunkCount, chunkCount);
 
             lifecycleService.moveTo(document, DocumentStatus.CHUNKED);
-            documentMapper.updateById(document);
+            updateDocumentAndCollectionCounts(document);
             progressListener.update("CHUNKED", 100, "Index process completed", chunkCount);
 
             log.info("Index process completed successfully for documentId: {}", documentId);
@@ -105,14 +109,14 @@ public class DocumentIndexService {
 
             progressListener.update("EMBEDDING", 10, "Generating embeddings", chunkCount);
             lifecycleService.moveTo(document, DocumentStatus.EMBEDDING);
-            documentMapper.updateById(document);
+            updateDocumentAndCollectionCounts(document);
 
             int embeddingCount = embeddingService.embedDocumentChunks(documentId);
             log.info("Embedding generation completed, embeddings: {}", embeddingCount);
             progressListener.update("EMBEDDED", 95, "Embeddings generated: " + embeddingCount, chunkCount);
 
             lifecycleService.moveTo(document, DocumentStatus.READY);
-            documentMapper.updateById(document);
+            updateDocumentAndCollectionCounts(document);
             progressListener.update("READY", 100, "Embedding process completed", chunkCount);
 
             log.info("Embedding process completed successfully for documentId: {}", documentId);
@@ -120,9 +124,21 @@ public class DocumentIndexService {
             log.error("Embedding process failed for documentId: {}", documentId, e);
             if (document.getStatus() != DocumentStatus.FAILED) {
                 lifecycleService.fail(document, e.getMessage());
-                documentMapper.updateById(document);
+                updateDocumentAndCollectionCounts(document);
             }
             throw e;
+        }
+    }
+
+    private void updateDocumentAndCollectionCounts(RagDocument document) {
+        documentMapper.updateById(document);
+        if (document.getCollectionId() != null) {
+            try {
+                collectionService.updateCollectionCounts(document.getCollectionId());
+            } catch (Exception e) {
+                log.warn("Failed to update collection counts for collectionId: {}",
+                    document.getCollectionId(), e);
+            }
         }
     }
 }

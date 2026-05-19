@@ -6,6 +6,7 @@ import com.my.rag.chat.dto.Evidence;
 import com.my.rag.chat.dto.EvidencePack;
 import com.my.rag.chat.service.ContextBuilder;
 import com.my.rag.config.RagProperties;
+import com.my.rag.document.service.DocumentScopeResolver;
 import com.my.rag.embedding.client.EmbeddingClient;
 import com.my.rag.embedding.client.EmbeddingClientException;
 import com.my.rag.embedding.dto.EmbeddingInput;
@@ -36,6 +37,7 @@ public class RetrievalDebugService {
     private final HybridRanker hybridRanker;
     private final RerankerClient rerankerClient;
     private final ContextBuilder contextBuilder;
+    private final DocumentScopeResolver documentScopeResolver;
 
     public RetrievalDebugService(
             RagProperties ragProperties,
@@ -45,7 +47,8 @@ public class RetrievalDebugService {
             KeywordRetrievalService keywordRetrievalService,
             HybridRanker hybridRanker,
             RerankerClient rerankerClient,
-            ContextBuilder contextBuilder) {
+            ContextBuilder contextBuilder,
+            DocumentScopeResolver documentScopeResolver) {
         this.ragProperties = ragProperties;
         this.embeddingClient = embeddingClient;
         this.retrievalMapper = retrievalMapper;
@@ -54,6 +57,7 @@ public class RetrievalDebugService {
         this.hybridRanker = hybridRanker;
         this.rerankerClient = rerankerClient;
         this.contextBuilder = contextBuilder;
+        this.documentScopeResolver = documentScopeResolver;
     }
 
     public RetrievalDebugResponse debug(RetrievalDebugRequest request) {
@@ -72,7 +76,10 @@ public class RetrievalDebugService {
         int rrfTopK = resolveRrfTopK(topK);
         int rerankTopK = resolveRerankTopK(topK);
         double scoreThreshold = resolveScoreThreshold(request.scoreThreshold());
-        List<Long> documentIds = normalizeDocumentIds(request.documentIds());
+        List<Long> documentIds = documentScopeResolver.resolveDocumentIds(
+                request.documentIds(),
+                request.collectionIds()
+        );
 
         List<Double> questionEmbedding = embedQuestion(model, request.question());
         List<RetrievedChunk> vectorChunks = retrievalMapper.search(

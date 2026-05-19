@@ -38,9 +38,12 @@ public class DocumentController {
     }
 
     @PostMapping("/upload")
-    public ApiResponse<DocumentUploadResponse> uploadDocument(@RequestPart("file") MultipartFile file) {
-        log.info("API request: POST /api/rag/documents/upload, fileName: {}", file.getOriginalFilename());
-        return ApiResponse.success(documentService.uploadDocument(file));
+    public ApiResponse<DocumentUploadResponse> uploadDocument(
+            @RequestPart("file") MultipartFile file,
+            @RequestPart(value = "collectionId", required = false) Long collectionId) {
+        log.info("API request: POST /api/rag/documents/upload, fileName: {}, collectionId: {}",
+                file.getOriginalFilename(), collectionId);
+        return ApiResponse.success(documentService.uploadDocument(file, collectionId));
     }
 
     @GetMapping("/{id}/status")

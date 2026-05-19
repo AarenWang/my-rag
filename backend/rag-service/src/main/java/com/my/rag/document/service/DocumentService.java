@@ -57,8 +57,13 @@ public class DocumentService {
     }
 
     public DocumentUploadResponse uploadDocument(MultipartFile file) {
-        log.info("Received upload request, fileName: {}, size: {}", file.getOriginalFilename(), file.getSize());
-        
+        return uploadDocument(file, null);
+    }
+
+    public DocumentUploadResponse uploadDocument(MultipartFile file, Long collectionId) {
+        log.info("Received upload request, fileName: {}, size: {}, collectionId: {}",
+                file.getOriginalFilename(), file.getSize(), collectionId);
+
         if (file == null || file.isEmpty()) {
             log.warn("Upload rejected: file is empty");
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Uploaded file must not be empty");
@@ -95,9 +100,11 @@ public class DocumentService {
         document.setSourcePath(savedPath.toAbsolutePath().normalize().toString());
         document.setLanguage("zh");
         document.setStatus(DocumentStatus.UPLOADED);
+        document.setCollectionId(collectionId);
 
         documentMapper.insert(document);
-        log.info("Document uploaded successfully, documentId: {}, title: {}", document.getId(), document.getTitle());
+        log.info("Document uploaded successfully, documentId: {}, title: {}, collectionId: {}",
+                document.getId(), document.getTitle(), collectionId);
         return toUploadResponse(document, false);
     }
 
@@ -174,7 +181,8 @@ public class DocumentService {
                 document.getTitle(),
                 document.getFileName(),
                 document.getFileType(),
-                document.getStatus().value());
+                document.getStatus().value(),
+                document.getCollectionId());
     }
 
     private RagDocument findByFileHash(String fileHash) {

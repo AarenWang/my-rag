@@ -1,14 +1,15 @@
 import { useState } from "react";
 import {
+  getCollections,
   getDocumentEmbeddingEstimate,
   getDocuments,
   triggerDocumentEmbedding,
   triggerDocumentIndex,
   uploadDocument
 } from "@my-rag/api";
-import type { DocumentEmbeddingEstimate, DocumentSummary } from "@my-rag/types";
+import type { CollectionSummary, DocumentEmbeddingEstimate, DocumentSummary } from "@my-rag/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Card, Descriptions, Empty, Modal, Space, Table, Tag, Typography, Upload, message } from "antd";
+import { Button, Card, Descriptions, Empty, Modal, Select, Space, Table, Tag, Typography, Upload, message } from "antd";
 import { Eye, Inbox, PlayCircle, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import type { UploadProps } from "antd";
@@ -44,6 +45,13 @@ export default function Documents() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  const [selectedCollectionId, setSelectedCollectionId] = useState<number | undefined>();
+
+  const { data: collectionsData } = useQuery({
+    queryKey: ["collections"],
+    queryFn: () => getCollections(false),
+    retry: false
+  });
 
   const { data, isLoading } = useQuery({
     queryKey: ["documents"],
@@ -52,10 +60,12 @@ export default function Documents() {
   });
 
   const uploadMutation = useMutation({
-    mutationFn: (file: File) => uploadDocument(file),
+    mutationFn: ({ file, collectionId }: { file: File; collectionId?: number }) =>
+      uploadDocument(file, collectionId),
     onSuccess: (result) => {
       message.success(result.data.duplicate ? "Document already exists" : "Document uploaded");
       queryClient.invalidateQueries({ queryKey: ["documents"] });
+      setSelectedCollectionId(undefined);
     },
     onError: (error: Error) => {
       message.error(`Upload failed: ${error.message}`);
@@ -92,11 +102,21 @@ export default function Documents() {
     name: "file",
     showUploadList: false,
     beforeUpload: (file) => {
-      uploadMutation.mutate(file);
+      uploadMutation.mutate({ file, collectionId: selectedCollectionId });
       return false;
     },
     accept: ".txt,.md,.markdown,.epub"
   };
+
+  const allDocuments = data?.data ?? [];
+  const collections = collectionsData?.data ?? [];
+
+  const filteredDocuments = allDocuments.filter((doc) => {
+    if (selectedCollectionId === undefined) {
+      return true;
+    }
+    return doc.collectionId === selectedCollectionId;
+  });
 
   const handleIndex = (documentId: number) => {
     Modal.confirm({
@@ -193,11 +213,26 @@ export default function Documents() {
           <h1>Documents</h1>
           <p>Upload ebooks, rebuild chunks, and confirm embedding cost before vector generation.</p>
         </div>
-        <Upload {...uploadProps}>
-          <Button type="primary" icon={<Inbox size={16} />} loading={uploadMutation.isPending}>
-            {uploadMutation.isPending ? "Uploading..." : "Upload document"}
-          </Button>
-        </Upload>
+        <Space>
+          {collections.length > 0 && (
+            <Select
+              placeholder="Select collection"
+              style={{ width: 200 }}
+              allowClear
+              value={selectedCollectionId}
+              onChange={setSelectedCollectionId}
+              options={[
+                { label: "Default Collection", value: undefined },
+                ...collections.map((c) => ({ label: c.name, value: c.collectionId }))
+              ]}
+            />
+          )}
+          <Upload {...uploadProps}>
+            <Button type="primary" icon={<Inbox size={16} />} loading={uploadMutation.isPending}>
+              {uploadMutation.isPending ? "Uploading..." : "Upload document"}
+            </Button>
+          </Upload>
+        </Space>
       </div>
       <Card>
         <Table

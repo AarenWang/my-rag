@@ -24,6 +24,7 @@ public class RagDocument {
     private String language;
     private DocumentStatus status;
     private String errorMessage;
+    private Long collectionId;
 
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
@@ -117,6 +118,14 @@ public class RagDocument {
 
     public void setErrorMessage(String errorMessage) {
         this.errorMessage = errorMessage;
+    }
+
+    public Long getCollectionId() {
+        return collectionId;
+    }
+
+    public void setCollectionId(Long collectionId) {
+        this.collectionId = collectionId;
     }
 
     public LocalDateTime getCreatedAt() {

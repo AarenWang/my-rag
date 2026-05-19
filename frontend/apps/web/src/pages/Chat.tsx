@@ -1,7 +1,7 @@
-import { chat, getDocuments } from "@my-rag/api";
+import { chat, getCollections, getDocuments } from "@my-rag/api";
 import type { ChatRequest, ChatResponse } from "@my-rag/types";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Button, Card, Checkbox, Empty, Input, List, Space, Spin, Typography, message } from "antd";
+import { Button, Card, Checkbox, Empty, Input, List, Select, Space, Spin, Typography, message } from "antd";
 import { MessageSquare, Send } from "lucide-react";
 import { useState } from "react";
 import ChatMessage from "../components/ChatMessage";
@@ -17,6 +17,7 @@ interface ChatTurn {
 
 export default function Chat() {
   const [question, setQuestion] = useState("");
+  const [selectedCollectionIds, setSelectedCollectionIds] = useState<number[]>([]);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<number[]>([]);
   const [messages, setMessages] = useState<ChatTurn[]>([]);
   const [isTyping, setIsTyping] = useState(false);
@@ -26,7 +27,13 @@ export default function Chat() {
     queryFn: getDocuments,
   });
 
+  const { data: collectionsData } = useQuery({
+    queryKey: ["collections"],
+    queryFn: () => getCollections(false),
+  });
+
   const readyDocuments = (documentsData?.data ?? []).filter((document) => document.status === "READY");
+  const collections = collectionsData?.data ?? [];
 
   const chatMutation = useMutation({
     mutationFn: (payload: ChatRequest) => chat(payload),
@@ -69,6 +76,7 @@ export default function Chat() {
 
     const payload: ChatRequest = {
       question: userMessage,
+      collectionIds: selectedCollectionIds.length > 0 ? selectedCollectionIds : undefined,
       documentIds: selectedDocumentIds.length > 0 ? selectedDocumentIds : undefined,
     };
 
@@ -120,6 +128,32 @@ export default function Chat() {
         </div>
       </div>
 
+      {collections.length > 0 && (
+        <Card title="Select collections (optional)" size="small" style={{ marginBottom: 16 }}>
+          <Space direction="vertical" style={{ width: "100%" }}>
+            <Text type="secondary">
+              Select collections to limit search scope. When collections are selected, document selection will be ignored.
+            </Text>
+            <Select
+              mode="multiple"
+              placeholder="Select collections to search within"
+              style={{ width: "100%" }}
+              value={selectedCollectionIds}
+              onChange={setSelectedCollectionIds}
+              options={collections.map((c) => ({
+                label: `${c.name} (${c.readyDocumentCount}/${c.documentCount} docs)`,
+                value: c.collectionId
+              }))}
+            />
+            {selectedCollectionIds.length > 0 && (
+              <Button size="small" onClick={() => setSelectedCollectionIds([])}>
+                Clear collection selection
+              </Button>
+            )}
+          </Space>
+        </Card>
+      )}
+
       <Card title="Select documents (READY only)" size="small" style={{ marginBottom: 16 }}>
         {documentsLoading ? (
           <Spin tip="Loading documents..." />
@@ -128,10 +162,10 @@ export default function Chat() {
         ) : (
           <>
             <Space style={{ marginBottom: 12 }}>
-              <Button size="small" onClick={selectAll}>
+              <Button size="small" onClick={selectAll} disabled={selectedCollectionIds.length > 0}>
                 Select all
               </Button>
-              <Button size="small" onClick={clearSelection}>
+              <Button size="small" onClick={clearSelection} disabled={selectedCollectionIds.length > 0}>
                 Clear
               </Button>
               <Text type="secondary" style={{ marginLeft: 8 }}>

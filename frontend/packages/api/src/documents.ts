@@ -16,9 +16,12 @@ export function getDocumentStatus(documentId: number) {
   return request<DocumentStatus>(`/api/rag/documents/${documentId}/status`);
 }
 
-export function uploadDocument(file: File) {
+export function uploadDocument(file: File, collectionId?: number) {
   const formData = new FormData();
   formData.append("file", file);
+  if (collectionId !== undefined) {
+    formData.append("collectionId", String(collectionId));
+  }
   return request<DocumentUploadResponse>("/api/rag/documents/upload", {
     method: "POST",
     body: formData,

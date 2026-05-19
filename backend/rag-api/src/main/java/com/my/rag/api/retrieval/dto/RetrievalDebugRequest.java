@@ -6,5 +6,6 @@ import java.util.List;
 public record RetrievalDebugRequest(
         @NotBlank(message = "question must not be blank") String question,
         List<Long> documentIds,
+        List<Long> collectionIds,
         Integer topK,
         Double scoreThreshold) {}

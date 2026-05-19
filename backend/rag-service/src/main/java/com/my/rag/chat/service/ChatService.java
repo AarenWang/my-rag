@@ -14,6 +14,7 @@ import com.my.rag.chat.entity.RagChatLog;
 import com.my.rag.chat.repository.RagChatLogMapper;
 import com.my.rag.chat.service.ApiLogService;
 import com.my.rag.config.RagProperties;
+import com.my.rag.document.service.DocumentScopeResolver;
 import com.my.rag.retrieval.dto.RetrievalQuery;
 import com.my.rag.retrieval.dto.RetrievalResult;
 import com.my.rag.retrieval.dto.RetrievedChunk;
@@ -40,6 +41,7 @@ public class ChatService {
     private final RagChatLogMapper chatLogMapper;
     private final ApiLogService apiLogService;
     private final ContextBuilder contextBuilder;
+    private final DocumentScopeResolver documentScopeResolver;
 
     public ChatService(
             RagProperties ragProperties,
@@ -47,13 +49,15 @@ public class ChatService {
             LlmClient llmClient,
             RagChatLogMapper chatLogMapper,
             ApiLogService apiLogService,
-            ContextBuilder contextBuilder) {
+            ContextBuilder contextBuilder,
+            DocumentScopeResolver documentScopeResolver) {
         this.ragProperties = ragProperties;
         this.retrievalService = retrievalService;
         this.llmClient = llmClient;
         this.chatLogMapper = chatLogMapper;
         this.apiLogService = apiLogService;
         this.contextBuilder = contextBuilder;
+        this.documentScopeResolver = documentScopeResolver;
     }
 
     public ChatResponse chat(ChatRequest request) {
@@ -73,10 +77,16 @@ public class ChatService {
         try {
             int retrievalTopK = resolveTopK(request.topK());
             double scoreThreshold = resolveScoreThreshold(request.scoreThreshold());
+
+            List<Long> resolvedDocumentIds = documentScopeResolver.resolveDocumentIds(
+                    request.documentIds(),
+                    request.collectionIds()
+            );
+
             RetrievalResult retrievalResult = retrievalService.retrieve(new RetrievalQuery(
                     request.question(),
                     null,
-                    request.documentIds(),
+                    resolvedDocumentIds,
                     retrievalTopK,
                     scoreThreshold));
             retrievedChunks = retrievalResult.chunks();

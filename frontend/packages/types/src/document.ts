@@ -4,6 +4,7 @@ export interface DocumentSummary {
   fileName: string;
   fileType: string;
   status: string;
+  collectionId?: number | null;
 }
 
 export interface DocumentStatus {
