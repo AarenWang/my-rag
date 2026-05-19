@@ -20,3 +20,8 @@ uploads/
 .env.local
 application-local-secret.yml
 application-*-secret.yml
+
+xhs-output/
+image-cards
+.agents/
+.claude/skills/

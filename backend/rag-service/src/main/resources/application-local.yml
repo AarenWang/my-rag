@@ -8,12 +8,19 @@ rag:
   storage:
     upload-dir: ${RAG_UPLOAD_DIR:uploads/documents}
   retrieval:
-    mode: ${RAG_RETRIEVAL_MODE:vector}
-    keyword-index-enabled: ${RAG_KEYWORD_INDEX_ENABLED:false}
+    mode: ${RAG_RETRIEVAL_MODE:hybrid}
+    keyword-index-enabled: ${RAG_KEYWORD_INDEX_ENABLED:true}
     text-search-config: ${RAG_TEXT_SEARCH_CONFIG:jiebacfg}
     keyword-query-mode: ${RAG_KEYWORD_QUERY_MODE:websearch}
     keyword-max-queries: ${RAG_KEYWORD_MAX_QUERIES:3}
+    vector-top-k: ${RAG_RETRIEVAL_VECTOR_TOP_K:30}
+    keyword-top-k: ${RAG_RETRIEVAL_KEYWORD_TOP_K:30}
+    rrf-top-k: ${RAG_RETRIEVAL_RRF_TOP_K:30}
+    rerank-top-k: ${RAG_RETRIEVAL_RERANK_TOP_K:8}
+    context-top-k: ${RAG_RETRIEVAL_CONTEXT_TOP_K:6}
+    rrf-k: ${RAG_RETRIEVAL_RRF_K:60}
     reranker-provider: ${RAG_RERANKER_PROVIDER:noop}
+    max-context-chars: ${RAG_MAX_CONTEXT_CHARS:8000}
   model:
     embedding-provider: ${RAG_EMBEDDING_PROVIDER:mock}
     embedding-api-key: ${RAG_EMBEDDING_API_KEY:}
