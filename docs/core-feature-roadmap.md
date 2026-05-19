@@ -531,60 +531,861 @@ documentIds
 
 ### 1. Collection 知识库模型
 
-需要先明确：
+#### 目标
 
-- Collection 和 Document 的关系。
-- 一个文档是否允许属于多个 Collection。
-- 检索时按 Collection 过滤还是展开为 documentIds 过滤。
-- Collection 的统计字段、标签、描述和归档策略。
-- 未来接入权限时是否以 Collection 作为授权边界。
+在 Document 之上增加知识库组织层，让用户可以按主题、用途或项目管理文档。第一版不做权限和多租户，但数据模型要为后续权限边界预留。
+
+#### 范围决策
+
+- 第一版采用 `Collection -> Documents` 的一对多关系。
+- 一个文档只属于一个 Collection，避免检索过滤、统计和前端选择复杂化。
+- 提供一个默认 Collection，兼容已有未分组文档。
+- 检索接口可以接受 `collectionIds`，后端展开为 READY documents 后继续复用现有 documentIds 检索链路。
+- 暂不做跨 Collection 去重，重复文档仍由当前 file hash 去重规则控制。
+
+#### 数据模型
+
+新增表：
+
+```sql
+CREATE TABLE rag_collection (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(200) NOT NULL,
+    description TEXT,
+    tags TEXT,
+    archived BOOLEAN NOT NULL DEFAULT FALSE,
+    document_count INT NOT NULL DEFAULT 0,
+    ready_document_count INT NOT NULL DEFAULT 0,
+    chunk_count INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT now(),
+    updated_at TIMESTAMP DEFAULT now()
+);
+```
+
+修改 `rag_document`：
+
+```sql
+ALTER TABLE rag_document
+ADD COLUMN collection_id BIGINT REFERENCES rag_collection(id);
+
+CREATE INDEX idx_rag_document_collection_id
+ON rag_document(collection_id);
+```
+
+迁移策略：
+
+1. 创建默认 Collection，例如 `Default`。
+2. 将已有文档的 `collection_id` 指向默认 Collection。
+3. 后续上传接口未传 `collectionId` 时自动写入默认 Collection。
+
+#### 后端接口
+
+新增：
+
+```text
+GET    /api/rag/collections
+POST   /api/rag/collections
+GET    /api/rag/collections/{id}
+PATCH  /api/rag/collections/{id}
+POST   /api/rag/collections/{id}/archive
+GET    /api/rag/collections/{id}/documents
+```
+
+调整：
+
+```text
+POST /api/rag/documents/upload
+```
+
+支持 multipart 参数：
+
+```text
+collectionId
+```
+
+调整 Chat 和 Retrieval Debug 请求：
+
+```json
+{
+  "question": "...",
+  "collectionIds": [1, 2],
+  "documentIds": [10, 11]
+}
+```
+
+规则：
+
+- `documentIds` 优先级高于 `collectionIds`。
+- 如果两者都为空，则默认检索所有 READY 文档。
+- 如果只传 `collectionIds`，后端查询这些 Collection 下的 READY 文档并展开。
+
+#### 后端实现
+
+新增模块：
+
+```text
+collection/entity/RagCollection.java
+collection/repository/RagCollectionMapper.java
+collection/service/CollectionService.java
+collection/controller/CollectionController.java
+```
+
+新增辅助服务：
+
+```text
+DocumentScopeResolver
+```
+
+职责：
+
+- 统一解析 `documentIds` 和 `collectionIds`。
+- 只返回 READY 文档 ID。
+- 被 Chat、Retrieval、RetrievalDebug 复用。
+
+#### 前端实现
+
+新增页面：
+
+```text
+/collections
+/collections/:id
+```
+
+改造：
+
+- Documents 页面支持按 Collection 过滤和上传时选择 Collection。
+- Chat 页面支持选择 Collection，保留选择具体文档的高级入口。
+- Retrieval Debug 页面支持按 Collection 调试。
+- Dashboard 增加 Collection 统计。
+
+#### 验收标准
+
+- 老数据自动进入默认 Collection。
+- 上传文档时可以选择 Collection。
+- Chat 和 Retrieval Debug 可以按 Collection 限定检索范围。
+- 不选择 Collection 时行为与当前版本一致。
+- 归档 Collection 后默认列表隐藏，但历史文档和日志不丢失。
 
 ### 2. 多轮会话
 
-需要先明确：
+#### 目标
 
-- conversation、message、retrieval snapshot 的表结构。
-- 每轮追问如何结合历史上下文改写查询。
-- 多轮会话是否继承上一轮文档范围。
-- 每轮回答是否独立保存 evidence 和 sources。
-- 历史消息进入 LLM prompt 的截断策略。
+把当前单轮 Chat 升级为可追问的 conversation。每轮回答仍然重新检索，避免只依赖历史回答导致幻觉。
+
+#### 数据模型
+
+新增表：
+
+```sql
+CREATE TABLE rag_conversation (
+    id BIGSERIAL PRIMARY KEY,
+    title VARCHAR(300),
+    collection_ids TEXT,
+    document_ids TEXT,
+    message_count INT NOT NULL DEFAULT 0,
+    last_message_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT now(),
+    updated_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE rag_conversation_message (
+    id BIGSERIAL PRIMARY KEY,
+    conversation_id BIGINT NOT NULL REFERENCES rag_conversation(id) ON DELETE CASCADE,
+    role VARCHAR(30) NOT NULL,
+    content TEXT NOT NULL,
+    no_answer BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE INDEX idx_rag_conversation_message_conversation_id
+ON rag_conversation_message(conversation_id, id);
+```
+
+新增检索快照表：
+
+```sql
+CREATE TABLE rag_retrieval_snapshot (
+    id BIGSERIAL PRIMARY KEY,
+    conversation_id BIGINT REFERENCES rag_conversation(id) ON DELETE SET NULL,
+    message_id BIGINT REFERENCES rag_conversation_message(id) ON DELETE SET NULL,
+    question TEXT NOT NULL,
+    rewritten_question TEXT,
+    document_ids TEXT,
+    vector_chunk_ids TEXT,
+    keyword_chunk_ids TEXT,
+    rrf_chunk_ids TEXT,
+    reranked_chunk_ids TEXT,
+    evidence_json TEXT,
+    prompt_context TEXT,
+    created_at TIMESTAMP DEFAULT now()
+);
+```
+
+#### 查询改写策略
+
+新增：
+
+```text
+ConversationQueryRewriteService
+```
+
+输入：
+
+- 当前用户问题。
+- 最近 N 轮消息。
+- 当前会话 documentIds / collectionIds。
+
+输出：
+
+```json
+{
+  "standaloneQuestion": "根据上一轮讨论的上下文工程，它和记忆有什么区别？",
+  "reason": "用户使用了代词“它”，需要指代上一轮主题。"
+}
+```
+
+第一版可使用规则优先：
+
+- 如果问题包含“它/这个/上面/刚才/前面/两者”，拼接上一轮用户问题和助手回答摘要。
+- 如果问题本身完整，则原样使用。
+
+第二版再接 LLM query rewrite。
+
+#### 接口设计
+
+新增：
+
+```text
+POST /api/rag/conversations
+GET  /api/rag/conversations
+GET  /api/rag/conversations/{id}
+POST /api/rag/conversations/{id}/messages
+```
+
+发送消息请求：
+
+```json
+{
+  "question": "它和记忆有什么区别？",
+  "collectionIds": [1],
+  "documentIds": [],
+  "topK": 8,
+  "scoreThreshold": 0.35
+}
+```
+
+响应：
+
+```json
+{
+  "messageId": 100,
+  "answer": "...",
+  "noAnswer": false,
+  "rewrittenQuestion": "...",
+  "sources": [],
+  "snapshotId": 200
+}
+```
+
+#### Prompt 组装策略
+
+- 检索使用 `rewrittenQuestion`。
+- LLM 回答 prompt 中包含原问题、改写问题和 EvidencePack。
+- 历史消息只用于理解追问，不直接作为事实依据。
+- 历史消息最多保留最近 6 条，超过后用摘要替代。
+
+#### 前端实现
+
+新增：
+
+- 会话列表。
+- 会话详情。
+- 新建会话。
+- 追问输入框。
+- 展示 `rewrittenQuestion` 的调试折叠区。
+
+Chat 页面调整为：
+
+- 默认进入最近会话。
+- 可以新建临时会话。
+- 每轮消息下展示 sources。
+
+#### 验收标准
+
+- 单轮问答能力不回退。
+- 追问能继承上一轮主题并重新检索。
+- 每轮回答都有独立 sources 和 retrieval snapshot。
+- 会话刷新后历史消息仍可恢复。
 
 ### 3. Claim-source 结构化回答
 
-需要先明确：
+#### 目标
 
-- LLM 输出 JSON 结构。
-- 结构化解析失败时如何降级。
-- claim 和 sourceIds 的绑定粒度，是句子级、段落级还是要点级。
-- 前端如何展示无引用 claim。
-- 日志中是否保存完整 claims。
+把回答拆成可核验的结论，并把每条结论绑定到 sourceId。第一版采用要点级 claim，而不是句子级，降低解析难度。
+
+#### 响应结构
+
+新增 DTO：
+
+```json
+{
+  "answer": "整体回答文本",
+  "noAnswer": false,
+  "claims": [
+    {
+      "text": "系统会先根据 chunk tokenCount 估算 embedding 成本。",
+      "sourceIds": ["source_1", "source_3"],
+      "confidence": "high"
+    }
+  ],
+  "sources": []
+}
+```
+
+`confidence` 第一版只允许：
+
+```text
+high
+medium
+low
+```
+
+#### LLM 输出约束
+
+Prompt 要求模型输出 JSON：
+
+```json
+{
+  "answer": "...",
+  "claims": [
+    {
+      "text": "...",
+      "sourceIds": ["source_1"]
+    }
+  ],
+  "noAnswer": false
+}
+```
+
+规则：
+
+- 每个 claim 至少绑定一个 sourceId。
+- 如果没有足够依据，`noAnswer=true`，claims 为空。
+- 不允许引用不存在的 sourceId。
+- 如果多个来源冲突，生成独立 claim 并说明差异。
+
+#### 后端解析与降级
+
+新增：
+
+```text
+StructuredAnswerParser
+```
+
+流程：
+
+1. 尝试解析 LLM JSON。
+2. 校验 `sourceIds` 是否存在于 EvidencePack。
+3. 删除空 claim。
+4. 如果解析失败，降级为当前纯文本回答，并设置 `claims=[]`。
+5. 如果 claim 没有 sourceIds，标记为 `low`，前端展示风险提示。
+
+新增日志字段：
+
+```sql
+ALTER TABLE rag_chat_log
+ADD COLUMN claims_json TEXT,
+ADD COLUMN structured_answer_valid BOOLEAN DEFAULT FALSE;
+```
+
+#### 接口兼容
+
+当前 `ChatResponse` 保持：
+
+```text
+answer
+noAnswer
+sources
+```
+
+新增可选字段：
+
+```text
+claims
+structuredAnswerValid
+```
+
+这样旧前端仍可运行，新前端可以逐步使用 claims。
+
+#### 前端实现
+
+ChatMessage 增强：
+
+- 回答正文下展示 claims 列表。
+- 每个 claim 后显示 source 标签。
+- 点击 source 标签定位到 sources 区块。
+- 没有 source 的 claim 用 warning 样式标记。
+
+#### 验收标准
+
+- 正常回答至少包含一条 claim。
+- claim 的 sourceIds 都能对应到返回 sources。
+- JSON 解析失败不影响用户看到答案。
+- Chat log detail 可以查看原始 claims JSON。
 
 ### 4. 评测集和一键评测
 
-需要先明确：
+#### 目标
 
-- 评测样例字段。
-- expectedAnswer 是严格文本、语义判断还是只校验来源。
-- expectedSourceChunkIds 如何维护。
-- 评测指标定义，例如 recall hit rate、source precision、no-answer accuracy。
-- 评测运行结果是否持久化。
+建立 RAG 回归测试能力，支持对检索、拒答和回答依据做持续评估。第一版重点评测来源命中和拒答，不做复杂语义评分。
+
+#### 数据模型
+
+新增评测集：
+
+```sql
+CREATE TABLE rag_eval_set (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(200) NOT NULL,
+    description TEXT,
+    collection_ids TEXT,
+    document_ids TEXT,
+    created_at TIMESTAMP DEFAULT now(),
+    updated_at TIMESTAMP DEFAULT now()
+);
+```
+
+新增样例：
+
+```sql
+CREATE TABLE rag_eval_case (
+    id BIGSERIAL PRIMARY KEY,
+    eval_set_id BIGINT NOT NULL REFERENCES rag_eval_set(id) ON DELETE CASCADE,
+    question TEXT NOT NULL,
+    expected_no_answer BOOLEAN NOT NULL DEFAULT FALSE,
+    expected_source_chunk_ids TEXT,
+    expected_answer_keywords TEXT,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT now(),
+    updated_at TIMESTAMP DEFAULT now()
+);
+```
+
+新增运行结果：
+
+```sql
+CREATE TABLE rag_eval_run (
+    id BIGSERIAL PRIMARY KEY,
+    eval_set_id BIGINT NOT NULL REFERENCES rag_eval_set(id) ON DELETE CASCADE,
+    status VARCHAR(30) NOT NULL,
+    total_cases INT NOT NULL DEFAULT 0,
+    passed_cases INT NOT NULL DEFAULT 0,
+    recall_hit_rate DOUBLE PRECISION,
+    no_answer_accuracy DOUBLE PRECISION,
+    avg_latency_ms BIGINT,
+    started_at TIMESTAMP DEFAULT now(),
+    finished_at TIMESTAMP
+);
+
+CREATE TABLE rag_eval_run_case (
+    id BIGSERIAL PRIMARY KEY,
+    eval_run_id BIGINT NOT NULL REFERENCES rag_eval_run(id) ON DELETE CASCADE,
+    eval_case_id BIGINT NOT NULL REFERENCES rag_eval_case(id) ON DELETE CASCADE,
+    question TEXT NOT NULL,
+    answer TEXT,
+    no_answer BOOLEAN,
+    retrieved_chunk_ids TEXT,
+    source_hit BOOLEAN,
+    no_answer_match BOOLEAN,
+    keyword_match BOOLEAN,
+    latency_ms BIGINT,
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT now()
+);
+```
+
+#### 指标定义
+
+第一版指标：
+
+- `source_hit`：返回 sources 中至少命中一个 `expected_source_chunk_ids`。
+- `no_answer_match`：实际 noAnswer 与 expectedNoAnswer 一致。
+- `keyword_match`：回答包含 expectedAnswerKeywords 中配置的关键词。
+- `case_passed`：如果 expectedNoAnswer=true，则只看 noAnswerMatch；否则看 sourceHit 和 keywordMatch。
+
+聚合指标：
+
+- `recall_hit_rate = source_hit / 非拒答案例数`
+- `no_answer_accuracy = no_answer_match / 全部样例数`
+- `pass_rate = passed_cases / total_cases`
+
+#### 接口设计
+
+```text
+GET  /api/rag/eval/sets
+POST /api/rag/eval/sets
+GET  /api/rag/eval/sets/{id}
+POST /api/rag/eval/sets/{id}/cases
+PATCH /api/rag/eval/cases/{id}
+POST /api/rag/eval/sets/{id}/runs
+GET  /api/rag/eval/runs/{id}
+GET  /api/rag/eval/runs/{id}/cases
+```
+
+从检索调试结果创建样例：
+
+```text
+POST /api/rag/eval/cases/from-retrieval-debug
+```
+
+#### 后端实现
+
+新增：
+
+```text
+EvalSetService
+EvalCaseService
+EvalRunService
+EvalScorer
+```
+
+运行方式：
+
+- 第一版同步运行小评测集。
+- 超过阈值后接入任务持久化。
+
+#### 前端实现
+
+新增页面：
+
+```text
+/eval
+/eval/sets/:id
+/eval/runs/:id
+```
+
+展示：
+
+- 样例列表。
+- 一键运行。
+- 本次命中率、拒答准确率、失败样例。
+- 单个失败样例的 retrieval snapshot。
+
+#### 验收标准
+
+- 可以手动创建评测样例。
+- 可以从检索调试结果创建评测样例。
+- 可以运行评测集并持久化结果。
+- 可以清楚看到每个失败样例失败在哪个指标。
 
 ### 5. 任务持久化
 
-需要先明确：
+#### 目标
 
-- 任务状态机。
-- 任务类型，例如 index、embedding、reindex、keyword-index。
-- 服务重启后如何恢复 RUNNING 状态。
-- 是否支持取消、重试、批量任务。
-- 现有内存进度和任务表的职责划分。
+把当前内存中的索引进度升级为可持久化、可恢复、可查询的任务系统。第一版先覆盖 document index 和 embedding。
+
+#### 任务状态机
+
+```text
+PENDING
+  -> RUNNING
+  -> SUCCEEDED
+  -> FAILED
+  -> CANCELED
+```
+
+补充状态：
+
+```text
+RETRYING
+```
+
+第一版可以不实现真正取消，但保留 `CANCELED` 状态。
+
+#### 任务类型
+
+```text
+DOCUMENT_INDEX
+DOCUMENT_EMBEDDING
+KEYWORD_INDEX
+EVAL_RUN
+```
+
+第一阶段实现：
+
+- `DOCUMENT_INDEX`
+- `DOCUMENT_EMBEDDING`
+
+后续再接：
+
+- `KEYWORD_INDEX`
+- `EVAL_RUN`
+
+#### 数据模型
+
+```sql
+CREATE TABLE rag_task (
+    id BIGSERIAL PRIMARY KEY,
+    task_type VARCHAR(50) NOT NULL,
+    target_type VARCHAR(50) NOT NULL,
+    target_id BIGINT NOT NULL,
+    status VARCHAR(30) NOT NULL,
+    stage VARCHAR(50),
+    progress_percent INT NOT NULL DEFAULT 0,
+    message TEXT,
+    error_message TEXT,
+    retry_count INT NOT NULL DEFAULT 0,
+    max_retries INT NOT NULL DEFAULT 0,
+    request_json TEXT,
+    result_json TEXT,
+    started_at TIMESTAMP,
+    finished_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT now(),
+    updated_at TIMESTAMP DEFAULT now()
+);
+
+CREATE INDEX idx_rag_task_target
+ON rag_task(target_type, target_id, created_at DESC);
+
+CREATE INDEX idx_rag_task_status
+ON rag_task(status, created_at DESC);
+```
+
+#### 后端实现
+
+新增：
+
+```text
+task/entity/RagTask.java
+task/repository/RagTaskMapper.java
+task/service/TaskService.java
+task/service/TaskProgressReporter.java
+task/controller/TaskController.java
+```
+
+改造：
+
+- `DocumentIndexTaskService.submitIndex` 创建 `rag_task`。
+- `DocumentIndexTaskService.submitEmbedding` 创建 `rag_task`。
+- 当前 `ProgressSnapshot` 改为从 task 表读取。
+- 任务执行过程中更新 task 的 stage、progress、message。
+
+重启恢复策略：
+
+- 应用启动时扫描 `RUNNING` 和 `RETRYING` 任务。
+- 第一版保守处理：全部标记为 `FAILED`，errorMessage 为 `Service restarted before task completed`。
+- 后续支持真正恢复时再加入幂等 task runner。
+
+并发控制：
+
+- 同一个 document 同一时间只允许一个 RUNNING/PENDING 任务。
+- 使用数据库查询和唯一约束防重复提交。
+
+#### 接口设计
+
+```text
+GET  /api/rag/tasks
+GET  /api/rag/tasks/{id}
+GET  /api/rag/documents/{id}/tasks/latest
+POST /api/rag/tasks/{id}/retry
+POST /api/rag/tasks/{id}/cancel
+```
+
+文档现有接口响应增加 `taskId`：
+
+```json
+{
+  "documentId": 1,
+  "taskId": 20,
+  "status": "QUEUED",
+  "message": "Document index task accepted"
+}
+```
+
+#### 前端实现
+
+- Documents 页面操作按钮提交后根据 taskId 轮询任务状态。
+- Document Detail 页面展示最新任务。
+- 新增任务历史列表。
+- 失败任务支持 Retry。
+
+#### 验收标准
+
+- 服务重启后任务状态不会消失。
+- 文档详情页可以看到最近任务状态。
+- 同一文档重复点击不会创建多个并发任务。
+- 任务失败时可看到明确错误信息。
 
 ### 6. 笔记、摘录、学习卡片
 
-需要先明确：
+#### 目标
 
-- note、highlight、excerpt、card 的边界。
-- 是否都归属 Collection。
-- 是否允许从问答、chunk、原文三种入口创建。
-- 是否需要双向链接到 source chunk。
-- 前端主工作流是阅读视图、问答视图还是独立知识整理视图。
+把问答和阅读过程中的有价值内容沉淀为个人知识资产。第一版只做结构化保存和基础列表，不做复杂双链和 spaced repetition。
+
+#### 边界定义
+
+```text
+Note：用户主动写的笔记，可以引用问答、chunk 或摘录。
+Excerpt：从 chunk 或回答中保存的一段原文摘录。
+Highlight：原文中的高亮范围，通常绑定 chunk。
+Card：面向复习的问答卡或概念卡。
+```
+
+第一版实现：
+
+- Note。
+- Excerpt。
+- Card。
+
+Highlight 需要原文定位能力更强，可以放第二版。
+
+#### 数据模型
+
+```sql
+CREATE TABLE rag_note (
+    id BIGSERIAL PRIMARY KEY,
+    collection_id BIGINT REFERENCES rag_collection(id),
+    title VARCHAR(300),
+    content TEXT NOT NULL,
+    source_type VARCHAR(50),
+    source_id BIGINT,
+    tags TEXT,
+    created_at TIMESTAMP DEFAULT now(),
+    updated_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE rag_excerpt (
+    id BIGSERIAL PRIMARY KEY,
+    collection_id BIGINT REFERENCES rag_collection(id),
+    document_id BIGINT REFERENCES rag_document(id) ON DELETE SET NULL,
+    chunk_id BIGINT REFERENCES rag_document_chunk(id) ON DELETE SET NULL,
+    chat_log_id BIGINT REFERENCES rag_chat_log(id) ON DELETE SET NULL,
+    content TEXT NOT NULL,
+    note TEXT,
+    tags TEXT,
+    created_at TIMESTAMP DEFAULT now(),
+    updated_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE rag_study_card (
+    id BIGSERIAL PRIMARY KEY,
+    collection_id BIGINT REFERENCES rag_collection(id),
+    card_type VARCHAR(50) NOT NULL,
+    front TEXT NOT NULL,
+    back TEXT NOT NULL,
+    source_type VARCHAR(50),
+    source_id BIGINT,
+    source_chunk_id BIGINT,
+    tags TEXT,
+    archived BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT now(),
+    updated_at TIMESTAMP DEFAULT now()
+);
+```
+
+`source_type` 取值：
+
+```text
+CHAT_LOG
+CHUNK
+EXCERPT
+MANUAL
+```
+
+#### 接口设计
+
+Notes：
+
+```text
+GET  /api/rag/notes
+POST /api/rag/notes
+GET  /api/rag/notes/{id}
+PATCH /api/rag/notes/{id}
+DELETE /api/rag/notes/{id}
+```
+
+Excerpts：
+
+```text
+GET  /api/rag/excerpts
+POST /api/rag/excerpts
+PATCH /api/rag/excerpts/{id}
+DELETE /api/rag/excerpts/{id}
+```
+
+Cards：
+
+```text
+GET  /api/rag/cards
+POST /api/rag/cards
+PATCH /api/rag/cards/{id}
+POST /api/rag/cards/{id}/archive
+```
+
+从回答生成笔记：
+
+```text
+POST /api/rag/notes/from-chat-log/{chatLogId}
+```
+
+从 chunk 生成卡片：
+
+```text
+POST /api/rag/cards/from-chunk/{chunkId}
+```
+
+#### 后端实现
+
+新增模块：
+
+```text
+note/
+excerpt/
+card/
+```
+
+新增生成服务：
+
+```text
+CardGenerationService
+DocumentSummaryNoteService
+```
+
+第一版生成卡片时可以直接调用 LLM：
+
+输入：
+
+- chunk content。
+- document title。
+- chapter title。
+
+输出：
+
+- front。
+- back。
+- tags。
+
+#### 前端实现
+
+新增页面：
+
+```text
+/notes
+/notes/:id
+/excerpts
+/cards
+```
+
+入口：
+
+- Chat answer 下方提供“保存为笔记”。
+- SourceList 中每个来源提供“保存摘录”。
+- ChunkPreview 提供“生成卡片”。
+
+#### 验收标准
+
+- 可以从回答保存笔记。
+- 可以从引用来源保存摘录。
+- 可以从 chunk 生成学习卡片。
+- Note、Excerpt、Card 都能按 Collection 和 tag 过滤。
+- 删除笔记不会删除原始文档、chunk 或 chat log。
