@@ -6,6 +6,7 @@ import ChatLogDetail from "./pages/ChatLogDetail";
 import Dashboard from "./pages/Dashboard";
 import DocumentDetail from "./pages/DocumentDetail";
 import Documents from "./pages/Documents";
+import RetrievalDebug from "./pages/RetrievalDebug";
 import Settings from "./pages/Settings";
 
 export default function App() {
@@ -17,6 +18,7 @@ export default function App() {
         <Route path="/documents" element={<Documents />} />
         <Route path="/documents/:documentId" element={<DocumentDetail />} />
         <Route path="/chat" element={<Chat />} />
+        <Route path="/retrieval-debug" element={<RetrievalDebug />} />
         <Route path="/chat-logs" element={<ChatLogs />} />
         <Route path="/chat-logs/:id" element={<ChatLogDetail />} />
         <Route path="/settings" element={<Settings />} />
@@ -24,4 +26,3 @@ export default function App() {
     </Routes>
   );
 }
-
