@@ -9,6 +9,7 @@ import com.my.rag.api.document.dto.DocumentSummaryResponse;
 import com.my.rag.api.document.dto.DocumentUploadResponse;
 import com.my.rag.chunk.entity.RagDocumentChunk;
 import com.my.rag.chunk.repository.RagDocumentChunkMapper;
+import com.my.rag.collection.service.CollectionService;
 import com.my.rag.config.RagProperties;
 import com.my.rag.document.entity.RagDocument;
 import com.my.rag.document.enums.DocumentStatus;
@@ -44,16 +45,19 @@ public class DocumentService {
     private final RagDocumentChunkMapper chunkMapper;
     private final RagProperties ragProperties;
     private final DocumentIndexTaskService indexTaskService;
+    private final CollectionService collectionService;
 
     public DocumentService(
             RagDocumentMapper documentMapper,
             RagDocumentChunkMapper chunkMapper,
             RagProperties ragProperties,
-            DocumentIndexTaskService indexTaskService) {
+            DocumentIndexTaskService indexTaskService,
+            CollectionService collectionService) {
         this.documentMapper = documentMapper;
         this.chunkMapper = chunkMapper;
         this.ragProperties = ragProperties;
         this.indexTaskService = indexTaskService;
+        this.collectionService = collectionService;
     }
 
     public DocumentUploadResponse uploadDocument(MultipartFile file) {
@@ -84,6 +88,7 @@ public class DocumentService {
 
         byte[] bytes = readBytes(file);
         String fileHash = sha256Hex(bytes);
+        Long resolvedCollectionId = collectionService.resolveUploadCollectionId(collectionId);
         RagDocument existing = findByFileHash(fileHash);
         if (existing != null) {
             log.info("Upload skipped: document already exists, documentId: {}", existing.getId());
@@ -100,11 +105,12 @@ public class DocumentService {
         document.setSourcePath(savedPath.toAbsolutePath().normalize().toString());
         document.setLanguage("zh");
         document.setStatus(DocumentStatus.UPLOADED);
-        document.setCollectionId(collectionId);
+        document.setCollectionId(resolvedCollectionId);
 
         documentMapper.insert(document);
+        collectionService.updateCollectionCounts(resolvedCollectionId);
         log.info("Document uploaded successfully, documentId: {}, title: {}, collectionId: {}",
-                document.getId(), document.getTitle(), collectionId);
+                document.getId(), document.getTitle(), resolvedCollectionId);
         return toUploadResponse(document, false);
     }
 

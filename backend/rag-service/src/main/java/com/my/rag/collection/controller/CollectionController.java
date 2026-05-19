@@ -7,6 +7,7 @@ import com.my.rag.api.collection.dto.CreateCollectionRequest;
 import com.my.rag.api.collection.dto.UpdateCollectionRequest;
 import com.my.rag.collection.service.CollectionService;
 import com.my.rag.common.response.ApiResponse;
+import jakarta.validation.Valid;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,7 +40,7 @@ public class CollectionController {
     }
 
     @PostMapping
-    public ApiResponse<CollectionDetailResponse> createCollection(@RequestBody CreateCollectionRequest request) {
+    public ApiResponse<CollectionDetailResponse> createCollection(@Valid @RequestBody CreateCollectionRequest request) {
         log.info("API request: POST /api/rag/collections, name: {}", request.name());
         return ApiResponse.success(collectionService.createCollection(request));
     }
@@ -53,7 +54,7 @@ public class CollectionController {
     @PatchMapping("/{id}")
     public ApiResponse<CollectionDetailResponse> updateCollection(
             @PathVariable Long id,
-            @RequestBody UpdateCollectionRequest request) {
+            @Valid @RequestBody UpdateCollectionRequest request) {
         log.info("API request: PATCH /api/rag/collections/{}", id);
         return ApiResponse.success(collectionService.updateCollection(id, request));
     }

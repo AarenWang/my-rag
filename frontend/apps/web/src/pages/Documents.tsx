@@ -238,7 +238,7 @@ export default function Documents() {
         <Table
           loading={isLoading}
           rowKey="documentId"
-          dataSource={data?.data ?? []}
+          dataSource={filteredDocuments}
           locale={{ emptyText: <Empty description="No documents yet." /> }}
           columns={columns}
         />

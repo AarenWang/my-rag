@@ -82,6 +82,16 @@ public class ChatService {
                     request.documentIds(),
                     request.collectionIds()
             );
+            if (hasExplicitScope(request.documentIds(), request.collectionIds()) && resolvedDocumentIds.isEmpty()) {
+                response = new ChatResponse(NO_EVIDENCE_ANSWER, true, List.of());
+                chatLog.setAnswer(response.answer());
+                chatLog.setDocumentIds("");
+                chatLog.setRetrievedChunkIds("");
+                chatLog.setTopK(resolveTopK(request.topK()));
+                chatLog.setLatencyMs(elapsedMillis(startedAt));
+                chatLogMapper.updateById(chatLog);
+                return response;
+            }
 
             RetrievalResult retrievalResult = retrievalService.retrieve(new RetrievalQuery(
                     request.question(),
@@ -94,7 +104,7 @@ public class ChatService {
             if (retrievalResult.noEvidence()) {
                 response = new ChatResponse(NO_EVIDENCE_ANSWER, true, List.of());
                 chatLog.setAnswer(response.answer());
-                chatLog.setDocumentIds(joinIds(request.documentIds()));
+                chatLog.setDocumentIds(joinIds(resolvedDocumentIds));
                 chatLog.setRetrievedChunkIds("");
                 chatLog.setTopK(resolveTopK(request.topK()));
                 chatLog.setLatencyMs(elapsedMillis(startedAt));
@@ -106,7 +116,7 @@ public class ChatService {
             if (evidencePack.evidences().isEmpty()) {
                 response = new ChatResponse(NO_EVIDENCE_ANSWER, true, List.of());
                 chatLog.setAnswer(response.answer());
-                chatLog.setDocumentIds(joinIds(request.documentIds()));
+                chatLog.setDocumentIds(joinIds(resolvedDocumentIds));
                 chatLog.setRetrievedChunkIds("");
                 chatLog.setTopK(resolveTopK(request.topK()));
                 chatLog.setLatencyMs(elapsedMillis(startedAt));
@@ -142,7 +152,7 @@ public class ChatService {
             response = new ChatResponse(withSourceReminder(llmResponse.content(), evidencePack), false, toSources(evidencePack));
             
             chatLog.setAnswer(response.answer());
-            chatLog.setDocumentIds(joinIds(request.documentIds()));
+            chatLog.setDocumentIds(joinIds(resolvedDocumentIds));
             chatLog.setRetrievedChunkIds(evidencePack.evidences().stream()
                     .map(Evidence::chunk)
                     .map(RetrievedChunk::chunkId)
@@ -230,6 +240,14 @@ public class ChatService {
                 .filter(Objects::nonNull)
                 .map(String::valueOf)
                 .collect(Collectors.joining(","));
+    }
+
+    private boolean hasExplicitScope(List<Long> documentIds, List<Long> collectionIds) {
+        return hasIds(documentIds) || hasIds(collectionIds);
+    }
+
+    private boolean hasIds(List<Long> ids) {
+        return ids != null && ids.stream().anyMatch(id -> id != null && id > 0);
     }
 
     private long elapsedMillis(long startedAt) {

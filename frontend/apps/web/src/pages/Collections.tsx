@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   archiveCollection,
   createCollection,
+  getCollection,
   getCollections,
   updateCollection
 } from "@my-rag/api";
@@ -82,10 +83,10 @@ export default function Collections() {
   };
 
   const handleEdit = (collection: CollectionSummary) => {
-    getCollections(true).then((response) => {
-      const detail = response.data.find((c) => c.collectionId === collection.collectionId);
+    getCollection(collection.collectionId).then((response) => {
+      const detail = response.data;
       if (detail) {
-        setEditingCollection(detail as CollectionDetail);
+        setEditingCollection(detail);
         form.setFieldsValue({
           name: detail.name,
           description: detail.description || "",
@@ -93,6 +94,8 @@ export default function Collections() {
         });
         setEditModalOpen(true);
       }
+    }).catch((error: Error) => {
+      message.error(`Failed to load collection: ${error.message}`);
     });
   };
 

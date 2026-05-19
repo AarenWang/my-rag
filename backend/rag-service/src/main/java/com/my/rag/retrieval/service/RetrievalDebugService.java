@@ -80,6 +80,20 @@ public class RetrievalDebugService {
                 request.documentIds(),
                 request.collectionIds()
         );
+        List<String> keywordQueries = keywordQueryService.generate(request.question());
+        if (hasExplicitScope(request.documentIds(), request.collectionIds()) && documentIds.isEmpty()) {
+            return new RetrievalDebugResponse(
+                    request.question(),
+                    ragProperties.getRetrieval().getMode(),
+                    ragProperties.getRetrieval().isKeywordIndexEnabled(),
+                    keywordQueries,
+                    toConfig(topK, vectorTopK, keywordTopK, rrfTopK, rerankTopK, scoreThreshold),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of());
+        }
 
         List<Double> questionEmbedding = embedQuestion(model, request.question());
         List<RetrievedChunk> vectorChunks = retrievalMapper.search(
@@ -89,7 +103,6 @@ public class RetrievalDebugService {
                 vectorTopK,
                 scoreThreshold);
 
-        List<String> keywordQueries = keywordQueryService.generate(request.question());
         List<RetrievedChunk> keywordChunks = keywordRetrievalService.search(request.question(), documentIds, keywordTopK);
 
         List<HybridCandidate> rrfCandidates = List.of();
@@ -257,6 +270,14 @@ public class RetrievalDebugService {
 
     private boolean isHybridMode() {
         return "hybrid".equalsIgnoreCase(ragProperties.getRetrieval().getMode());
+    }
+
+    private boolean hasExplicitScope(List<Long> documentIds, List<Long> collectionIds) {
+        return hasIds(documentIds) || hasIds(collectionIds);
+    }
+
+    private boolean hasIds(List<Long> ids) {
+        return ids != null && ids.stream().anyMatch(id -> id != null && id > 0);
     }
 
     private List<Long> normalizeDocumentIds(List<Long> documentIds) {

@@ -232,7 +232,9 @@ export default function RetrievalDebug() {
     debugMutation.mutate({
       question: trimmedQuestion,
       collectionIds: selectedCollectionIds.length > 0 ? selectedCollectionIds : undefined,
-      documentIds: selectedDocumentIds.length > 0 ? selectedDocumentIds : undefined,
+      documentIds: selectedCollectionIds.length > 0
+        ? undefined
+        : selectedDocumentIds.length > 0 ? selectedDocumentIds : undefined,
       topK: topK && topK > 0 ? topK : undefined,
       scoreThreshold: scoreThreshold ?? undefined
     });
@@ -297,7 +299,12 @@ export default function RetrievalDebug() {
               placeholder="Select collections to search within"
               style={{ width: "100%" }}
               value={selectedCollectionIds}
-              onChange={setSelectedCollectionIds}
+              onChange={(ids) => {
+                setSelectedCollectionIds(ids);
+                if (ids.length > 0) {
+                  setSelectedDocumentIds([]);
+                }
+              }}
               options={collections.map((c) => ({
                 label: `${c.name} (${c.readyDocumentCount}/${c.documentCount} docs)`,
                 value: c.collectionId
@@ -320,10 +327,14 @@ export default function RetrievalDebug() {
         ) : (
           <>
             <Space style={{ marginBottom: 12 }}>
-              <Button size="small" onClick={() => setSelectedDocumentIds(readyDocuments.map((item) => item.documentId))}>
+              <Button
+                size="small"
+                disabled={selectedCollectionIds.length > 0}
+                onClick={() => setSelectedDocumentIds(readyDocuments.map((item) => item.documentId))}
+              >
                 Select all
               </Button>
-              <Button size="small" onClick={() => setSelectedDocumentIds([])}>
+              <Button size="small" disabled={selectedCollectionIds.length > 0} onClick={() => setSelectedDocumentIds([])}>
                 Clear
               </Button>
               <Text type="secondary">
@@ -337,6 +348,7 @@ export default function RetrievalDebug() {
                   <List.Item.Meta
                     avatar={
                       <Checkbox
+                        disabled={selectedCollectionIds.length > 0}
                         checked={selectedDocumentIds.includes(document.documentId)}
                         onChange={() => toggleDocument(document.documentId)}
                       />

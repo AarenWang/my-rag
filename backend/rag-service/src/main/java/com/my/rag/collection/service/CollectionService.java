@@ -6,6 +6,8 @@ import com.my.rag.api.collection.dto.CollectionDocumentResponse;
 import com.my.rag.api.collection.dto.CollectionSummaryResponse;
 import com.my.rag.api.collection.dto.CreateCollectionRequest;
 import com.my.rag.api.collection.dto.UpdateCollectionRequest;
+import com.my.rag.chunk.entity.RagDocumentChunk;
+import com.my.rag.chunk.repository.RagDocumentChunkMapper;
 import com.my.rag.collection.entity.RagCollection;
 import com.my.rag.collection.repository.RagCollectionMapper;
 import com.my.rag.document.entity.RagDocument;
@@ -18,6 +20,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
@@ -27,10 +30,15 @@ public class CollectionService {
 
     private final RagCollectionMapper collectionMapper;
     private final RagDocumentMapper documentMapper;
+    private final RagDocumentChunkMapper chunkMapper;
 
-    public CollectionService(RagCollectionMapper collectionMapper, RagDocumentMapper documentMapper) {
+    public CollectionService(
+            RagCollectionMapper collectionMapper,
+            RagDocumentMapper documentMapper,
+            RagDocumentChunkMapper chunkMapper) {
         this.collectionMapper = collectionMapper;
         this.documentMapper = documentMapper;
+        this.chunkMapper = chunkMapper;
     }
 
     public List<CollectionSummaryResponse> listCollections(Boolean includeArchived) {
@@ -61,10 +69,13 @@ public class CollectionService {
 
     @Transactional
     public CollectionDetailResponse createCollection(CreateCollectionRequest request) {
+        if (request == null || !StringUtils.hasText(request.name())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "collection name must not be blank");
+        }
         log.info("Creating collection: {}", request.name());
 
         RagCollection collection = new RagCollection();
-        collection.setName(request.name());
+        collection.setName(request.name().trim());
         collection.setDescription(request.description());
         collection.setTags(request.tags());
         collection.setArchived(false);
@@ -80,6 +91,9 @@ public class CollectionService {
 
     @Transactional
     public CollectionDetailResponse updateCollection(Long id, UpdateCollectionRequest request) {
+        if (request == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "request body must not be null");
+        }
         log.info("Updating collection: {}", id);
 
         RagCollection collection = collectionMapper.selectById(id);
@@ -88,7 +102,10 @@ public class CollectionService {
         }
 
         if (request.name() != null) {
-            collection.setName(request.name());
+            if (!StringUtils.hasText(request.name())) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "collection name must not be blank");
+            }
+            collection.setName(request.name().trim());
         }
         if (request.description() != null) {
             collection.setDescription(request.description());
@@ -142,6 +159,26 @@ public class CollectionService {
     }
 
     @Transactional
+    public Long resolveUploadCollectionId(Long collectionId) {
+        if (collectionId == null) {
+            RagCollection defaultCollection = getDefaultCollection();
+            if (defaultCollection == null) {
+                defaultCollection = createDefaultCollection();
+            }
+            return defaultCollection.getId();
+        }
+
+        RagCollection collection = collectionMapper.selectById(collectionId);
+        if (collection == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Collection not found: " + collectionId);
+        }
+        if (Boolean.TRUE.equals(collection.getArchived())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot add documents to archived collection");
+        }
+        return collection.getId();
+    }
+
+    @Transactional
     public void updateCollectionCounts(Long collectionId) {
         RagCollection collection = collectionMapper.selectById(collectionId);
         if (collection == null) {
@@ -156,8 +193,30 @@ public class CollectionService {
         collection.setReadyDocumentCount((int) documents.stream()
                 .filter(d -> d.getStatus() == DocumentStatus.READY)
                 .count());
+        List<Long> documentIds = documents.stream()
+                .map(RagDocument::getId)
+                .toList();
+        if (documentIds.isEmpty()) {
+            collection.setChunkCount(0);
+        } else {
+            Long chunkCount = chunkMapper.selectCount(
+                    new LambdaQueryWrapper<RagDocumentChunk>().in(RagDocumentChunk::getDocumentId, documentIds));
+            collection.setChunkCount(chunkCount == null ? 0 : Math.toIntExact(chunkCount));
+        }
 
         collectionMapper.updateById(collection);
+    }
+
+    private RagCollection createDefaultCollection() {
+        RagCollection collection = new RagCollection();
+        collection.setName("Default");
+        collection.setDescription("Default collection for ungrouped documents");
+        collection.setArchived(false);
+        collection.setDocumentCount(0);
+        collection.setReadyDocumentCount(0);
+        collection.setChunkCount(0);
+        collectionMapper.insert(collection);
+        return collection;
     }
 
     private CollectionSummaryResponse toSummaryResponse(RagCollection collection) {

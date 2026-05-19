@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -40,7 +41,7 @@ public class DocumentController {
     @PostMapping("/upload")
     public ApiResponse<DocumentUploadResponse> uploadDocument(
             @RequestPart("file") MultipartFile file,
-            @RequestPart(value = "collectionId", required = false) Long collectionId) {
+            @RequestParam(value = "collectionId", required = false) Long collectionId) {
         log.info("API request: POST /api/rag/documents/upload, fileName: {}, collectionId: {}",
                 file.getOriginalFilename(), collectionId);
         return ApiResponse.success(documentService.uploadDocument(file, collectionId));

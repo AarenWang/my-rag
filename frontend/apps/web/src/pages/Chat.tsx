@@ -77,7 +77,9 @@ export default function Chat() {
     const payload: ChatRequest = {
       question: userMessage,
       collectionIds: selectedCollectionIds.length > 0 ? selectedCollectionIds : undefined,
-      documentIds: selectedDocumentIds.length > 0 ? selectedDocumentIds : undefined,
+      documentIds: selectedCollectionIds.length > 0
+        ? undefined
+        : selectedDocumentIds.length > 0 ? selectedDocumentIds : undefined,
     };
 
     chatMutation.mutate(payload);
@@ -139,7 +141,12 @@ export default function Chat() {
               placeholder="Select collections to search within"
               style={{ width: "100%" }}
               value={selectedCollectionIds}
-              onChange={setSelectedCollectionIds}
+              onChange={(ids) => {
+                setSelectedCollectionIds(ids);
+                if (ids.length > 0) {
+                  setSelectedDocumentIds([]);
+                }
+              }}
               options={collections.map((c) => ({
                 label: `${c.name} (${c.readyDocumentCount}/${c.documentCount} docs)`,
                 value: c.collectionId
@@ -179,6 +186,7 @@ export default function Chat() {
                   <List.Item.Meta
                     avatar={
                       <Checkbox
+                        disabled={selectedCollectionIds.length > 0}
                         checked={selectedDocumentIds.includes(document.documentId)}
                         onChange={() => toggleDocument(document.documentId)}
                       />

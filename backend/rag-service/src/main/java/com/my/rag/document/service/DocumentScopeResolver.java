@@ -30,14 +30,16 @@ public class DocumentScopeResolver {
     }
 
     public List<Long> resolveDocumentIds(List<Long> documentIds, List<Long> collectionIds) {
-        if (documentIds != null && !documentIds.isEmpty()) {
-            log.debug("Resolving scope using documentIds: {}", documentIds);
-            return getReadyDocumentsFromIds(documentIds);
+        List<Long> normalizedDocumentIds = normalizeIds(documentIds);
+        if (!normalizedDocumentIds.isEmpty()) {
+            log.debug("Resolving scope using documentIds: {}", normalizedDocumentIds);
+            return getReadyDocumentsFromIds(normalizedDocumentIds);
         }
 
-        if (collectionIds != null && !collectionIds.isEmpty()) {
-            log.debug("Resolving scope using collectionIds: {}", collectionIds);
-            return getReadyDocumentsFromCollections(collectionIds);
+        List<Long> normalizedCollectionIds = normalizeIds(collectionIds);
+        if (!normalizedCollectionIds.isEmpty()) {
+            log.debug("Resolving scope using collectionIds: {}", normalizedCollectionIds);
+            return getReadyDocumentsFromCollections(normalizedCollectionIds);
         }
 
         log.debug("No documentIds or collectionIds provided, returning all READY documents");
@@ -58,6 +60,7 @@ public class DocumentScopeResolver {
     private List<Long> getReadyDocumentsFromCollections(List<Long> collectionIds) {
         LambdaQueryWrapper<RagCollection> collectionWrapper = new LambdaQueryWrapper<>();
         collectionWrapper.in(RagCollection::getId, collectionIds);
+        collectionWrapper.eq(RagCollection::getArchived, false);
         List<RagCollection> collections = collectionMapper.selectList(collectionWrapper);
 
         if (collections.isEmpty()) {
@@ -65,8 +68,11 @@ public class DocumentScopeResolver {
             return Collections.emptyList();
         }
 
+        List<Long> activeCollectionIds = collections.stream()
+                .map(RagCollection::getId)
+                .toList();
         LambdaQueryWrapper<RagDocument> wrapper = new LambdaQueryWrapper<>();
-        wrapper.in(RagDocument::getCollectionId, collectionIds);
+        wrapper.in(RagDocument::getCollectionId, activeCollectionIds);
         wrapper.eq(RagDocument::getStatus, DocumentStatus.READY);
         wrapper.select(RagDocument::getId);
 
@@ -88,5 +94,15 @@ public class DocumentScopeResolver {
     public Set<Long> getReadyDocumentIdsSet(List<Long> documentIds, List<Long> collectionIds) {
         return resolveDocumentIds(documentIds, collectionIds).stream()
                 .collect(Collectors.toSet());
+    }
+
+    private List<Long> normalizeIds(List<Long> ids) {
+        if (ids == null) {
+            return List.of();
+        }
+        return ids.stream()
+                .filter(id -> id != null && id > 0)
+                .distinct()
+                .toList();
     }
 }

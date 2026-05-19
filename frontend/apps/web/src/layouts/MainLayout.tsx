@@ -1,8 +1,9 @@
-import { BookOpen, LayoutDashboard, MessageSquareText, History, SearchCheck, Settings } from "lucide-react";
+import { BookOpen, Folder, LayoutDashboard, MessageSquareText, History, SearchCheck, Settings } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 
 const navItems = [
   { path: "/dashboard", label: "概览", icon: LayoutDashboard },
+  { path: "/collections", label: "知识库", icon: Folder },
   { path: "/documents", label: "文档", icon: BookOpen },
   { path: "/chat", label: "问答", icon: MessageSquareText },
   { path: "/retrieval-debug", label: "检索调试", icon: SearchCheck },
